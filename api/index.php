@@ -31,7 +31,7 @@ try {
         )
     ");
     // Reset sequence properly
-    $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 0), true);");
+    $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
 } catch (PDOException $e) {
     http_response_code(500);
     die('数据库连接失败: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
