@@ -1187,7 +1187,7 @@ elseif ($path === '/' || $path === '') {
                 <h1 class="text-5xl md:text-7xl font-bold mb-6">Zuz.Asia</h1>
                 <p class="text-xl text-muted-foreground max-w-3xl mx-auto mb-8">无需注册，即时创建短链接。简单、高效、安全。享受无缝的链接管理体验。我们的免费计划让您轻松开始。</p>
                 <div class="space-x-4">
-                    <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+                    <a href="/create" class="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-base">免费开始</a>
                 </div>
             </section>
 
