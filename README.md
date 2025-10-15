@@ -22,7 +22,7 @@ php -S localhost:8000 -t . api/index.php
 ## Vercel搭建
 
 Frok本仓库后，进入Vercel控制台导入该项目，按照环境变量格式填好环境变量即可搭建成功。
-也可点击如下链接一键部署，部署成功后再填环境变量之后重新Deploy一次即可。
+也可点击如下链接一键部署，部署成功后再填环境变量之后重新Deploy一次即可。  
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/JanePHPDev/ZuzShortURL)
 
 ## 免费数据库方案（Supabase）
