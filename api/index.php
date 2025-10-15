@@ -65,7 +65,7 @@ function validate_csrf_token($token) {
 // Rate limiting: 10 requests per minute per IP
 function check_rate_limit($pdo) {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $max_requests = 10;
+    $max_requests = 120;
     $window_seconds = 60;
 
     // Check for recent requests
