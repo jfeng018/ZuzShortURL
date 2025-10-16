@@ -5,8 +5,9 @@ on:
     types: [published]
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write        # 上传 provenance
+  id-token: write        # OIDC 签名
+  actions: read          
 
 jobs:
   download:
