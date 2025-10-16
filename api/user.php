@@ -305,11 +305,13 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
         <div class="flex justify-between mb-4">
+            <div class="flex space-x-2">
                 <a href="?sort=time" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">时间排序</a>
                 <a href="?sort=clicks" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">流量排序</a>
+            </div>
             <button onclick="openAddModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">+ 新建链接</button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="md:hidden space-y-4">
             <?php foreach ($links as $link): ?>
                 <div class="bg-card rounded-lg border p-4">
                     <div class="flex items-center space-x-2 mb-2">
@@ -335,8 +337,58 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                 </div>
             <?php endforeach; ?>
             <?php if (empty($links)): ?>
-                <div class="col-span-full text-center py-12 text-muted-foreground">暂无链接。</div>
+                <div class="text-center py-12 text-muted-foreground">暂无链接。</div>
             <?php endif; ?>
+        </div>
+        <div class="hidden md:block overflow-x-auto">
+            <table class="min-w-full bg-card rounded-lg border border-border">
+                <thead>
+                    <tr class="border-b border-border">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">短链接</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">长链接</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">点击量</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">过期时间</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">中继页</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                    <?php foreach ($links as $link): ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                    <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-muted-foreground truncate max-w-xs" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo htmlspecialchars($link['clicks']); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d H:i', strtotime($link['created_at'])); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
+                                <div class="flex space-x-2">
+                                    <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                    <form method="post" class="inline" onsubmit="return confirm('删除?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                        <button type="submit" class="bg-destructive text-destructive-foreground px-3 py-1 rounded">删除</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($links)): ?>
+                        <tr>
+                            <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">暂无链接。</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
         <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="bg-card rounded-lg border p-6 text-center">
