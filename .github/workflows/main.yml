@@ -1,0 +1,26 @@
+name: SLSA3 provenance for GitHub auto-generated tarball
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write        # 上传 provenance
+  id-token: write        # OIDC 令牌
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 下载 GitHub 自动生成的源码包
+      - uses: robinraju/release-downloader@v1.8
+        with:
+          tag: ${{ github.event.release.tag_name }}
+          fileName: "*.tar.gz"   # 只拉 tar.gz
+
+      # 2. 生成 provenance（仅签名，不重新构建）
+      - name: Generate provenance
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+        with:
+          base64-subjects: ${{ hashFiles('*.tar.gz') }}
+          upload-assets: true
