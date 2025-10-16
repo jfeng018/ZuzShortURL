@@ -38,7 +38,7 @@ if ($method === 'POST') {
             if (empty($error)) {
                 $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
                 $stmt->execute([$code, $longurl, $user_id, $enable_intermediate ? 'true' : 'false', $expiration ?: null]);
-                $short_url = get_base_url() . '/' . $code;
+                $short_url = $base_url . '/' . $code;  // 修复：使用全局变量 $base_url，而非函数调用
                 $success = '短链接创建成功！';
                 // Update cookie history
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
