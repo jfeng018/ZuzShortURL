@@ -25,7 +25,6 @@ $stmt = $pdo->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE shortcod
 $stmt->execute([$code]);
 
 if ($link['enable_intermediate_page']) {
-    // Render intermediate page
     ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -190,11 +189,40 @@ if ($link['enable_intermediate_page']) {
                 backdrop-filter: blur(2px);
                 -webkit-backdrop-filter: blur(2px);
             }
+
+            .mobile-menu {
+                display: none;
+                z-index: 50;
+            }
+
+            @media (max-width: 768px) {
+                .desktop-menu {
+                    display: none;
+                }
+                .mobile-menu {
+                    display: block;
+                }
+            }
+
+            .mobile-menu {
+                animation: slideDown 0.3s ease-out;
+            }
+
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
         </style>
         <meta http-equiv="refresh" content="5;url=<?php echo htmlspecialchars($link['longurl']); ?>">
     </head>
     <body class="bg-background text-foreground min-h-screen flex items-center justify-center">
-        <div class="container mx-auto p-8">
+        <div class="container mx-auto p-4">
             <div class="max-w-lg mx-auto bg-card rounded-lg border p-6 text-center">
                 <h2 class="text-2xl font-bold mb-4">正在跳转...</h2>
                 <p class="text-muted-foreground mb-4">您将被重定向到以下链接:</p>

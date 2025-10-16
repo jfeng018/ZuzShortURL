@@ -1,11 +1,15 @@
 <?php
 require_once 'config.php';
 
+if (get_setting($pdo, 'private_mode') && !require_admin_auth()) {
+    header('Location: /admin');
+    exit;
+}
+
 $history = [];
 if (isset($_COOKIE['short_history'])) {
     $history = json_decode($_COOKIE['short_history'], true) ?: [];
 }
-// Render home page
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -170,130 +174,194 @@ if (isset($_COOKIE['short_history'])) {
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
         }
+
+        .mobile-menu {
+            display: none;
+            z-index: 50;
+        }
+
+        @media (max-width: 768px) {
+            .desktop-menu {
+                display: none;
+            }
+            .mobile-menu {
+                display: block;
+            }
+        }
+
+        .mobile-menu {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
-    <nav class="bg-card border-b border-border px-4 py-4">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Zuz.Asia</h1>
-            <?php if (is_logged_in()): ?>
-                <div class="space-x-4">
+            <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+            <div class="hidden md:flex space-x-4 desktop-menu">
+                <?php if (is_logged_in()): ?>
                     <span class="text-muted-foreground">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
                     <a href="/dashboard" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">控制台</a>
                     <a href="/logout" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">登出</a>
-                </div>
-            <?php else: ?>
-                <div class="space-x-4">
+                <?php else: ?>
                     <a href="/login" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">登录</a>
                     <a href="/register" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">注册</a>
-                </div>
-            <?php endif; ?>
+                <?php endif; ?>
+                <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
+            </div>
+            <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                <?php if (is_logged_in()): ?>
+                    <span class="text-muted-foreground block">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                    <a href="/dashboard" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">控制台</a>
+                    <a href="/logout" class="block px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</a>
+                <?php else: ?>
+                    <a href="/login" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">登录</a>
+                    <a href="/register" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">注册</a>
+                <?php endif; ?>
+                <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+            </div>
         </div>
     </nav>
-    <div class="container mx-auto px-4 py-8">
-        <!-- Hero Section -->
-        <section class="hero-section text-center mb-16 bg-card/50 rounded-xl p-8">
-            <h1 class="text-5xl md:text-7xl font-bold mb-6">Zuz.Asia</h1>
-            <p class="text-xl text-muted-foreground max-w-3xl mx-auto mb-8">无需注册，即时创建短链接。简单、高效、安全。享受无缝的链接管理体验。我们的免费计划让您轻松开始。</p>
-            <div class="space-x-4">
-                <?php if (is_logged_in()): ?>
-                    <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
-                <?php else: ?>
-                    <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
-                <?php endif; ?>
+    <div class="container mx-auto px-4 py-4 pt-20">
+        <section class="hero-section mb-8 bg-card/50 rounded-xl p-4 md:p-8 md:flex md:items-center md:space-x-8">
+            <div class="md:w-1/2 mb-4 md:mb-0">
+                <h1 class="text-4xl md:text-6xl font-bold mb-4">Zuz.Asia</h1>
+                <p class="text-lg md:text-xl text-muted-foreground max-w-md">Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建的便利。</p>
+                <div class="space-x-4 mt-6">
+                    <?php if (is_logged_in()): ?>
+                        <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+                    <?php else: ?>
+                        <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+                    <?php endif; ?>
+                    <a href="/api/docs" class="inline-flex items-center px-8 py-4 bg-secondary text-secondary-foreground rounded-lg transition-colors font-semibold text-lg">API文档</a>
+                </div>
+            </div>
+            <div class="md:w-1/2">
+                <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d9aeb70eb59385c8.jpg" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
             </div>
         </section>
 
-        <!-- Features Section -->
-        <section class="grid md:grid-cols-3 gap-8 mb-16">
-            <div class="bg-card rounded-lg border p-8 pricing-card">
-                <h3 class="text-2xl font-bold mb-4">即时缩短</h3>
+        <section class="grid md:grid-cols-3 gap-4 md:gap-8 mb-8 md:mb-16">
+            <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                <h3 class="text-xl md:text-2xl font-bold mb-4">即时缩短</h3>
                 <p class="text-muted-foreground">输入长连接，一键生成短链接，无需等待、立即分享、极速加载</p>
             </div>
-            <div class="bg-card rounded-lg border p-8 pricing-card">
-                <h3 class="text-2xl font-bold mb-4">无限使用</h3>
+            <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                <h3 class="text-xl md:text-2xl font-bold mb-4">无限使用</h3>
                 <p class="text-muted-foreground">免费计划支持无限量地创建短链接，也可以Fork仓库源码自己搭建本系统。</p>
             </div>
-            <div class="bg-card rounded-lg border p-8 pricing-card">
-                <h3 class="text-2xl font-bold mb-4">安全可靠</h3>
+            <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                <h3 class="text-xl md:text-2xl font-bold mb-4">安全可靠</h3>
                 <p class="text-muted-foreground">基于PostgreSQL数据库加密存储，性能极致优化，安全可靠。</p>
             </div>
         </section>
 
-        <!-- Pricing Section -->
-        <section class="text-center mb-16">
-            <h2 class="text-3xl font-bold mb-8">选择您的计划</h2>
-            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <!-- Free Plan -->
-                <div class="bg-card rounded-lg border p-8 pricing-card">
-                    <h3 class="text-2xl font-bold mb-4">免费版</h3>
+        <section class="text-center mb-8 md:mb-16">
+            <h2 class="text-2xl md:text-3xl font-bold mb-8">选择您的计划</h2>
+            <div class="grid md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
+                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                    <h3 class="text-xl md:text-2xl font-bold mb-4">免费版</h3>
                     <ul class="space-y-2 text-left mb-6">
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限短链接</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本统计</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
                         <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 速率限制</li>
                     </ul>
-                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
                     <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
                 </div>
-                <!-- Registered User Plan -->
-                <div class="bg-card rounded-lg border p-8 pricing-card">
-                    <h3 class="text-2xl font-bold mb-4">注册用户套餐</h3>
+                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                    <h3 class="text-xl md:text-2xl font-bold mb-4">注册用户套餐</h3>
                     <ul class="space-y-2 text-left mb-6">
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 管理个人链接</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 高级统计数据</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 中继页设置</li>
                     </ul>
-                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
                     <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
                 </div>
-                <!-- Self-Hosted Plan -->
-                <div class="bg-card rounded-lg border p-8 pricing-card">
-                    <h3 class="text-2xl font-bold mb-4">自建用户套餐</h3>
+                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                    <h3 class="text-xl md:text-2xl font-bold mb-4">自建用户套餐</h3>
                     <ul class="space-y-2 text-left mb-6">
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全自由控制</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自托管部署</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义功能</li>
                         <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 开源免费</li>
                     </ul>
-                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
                     <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
                 </div>
             </div>
         </section>
 
-        <!-- Stats Section -->
-        <section class="grid md:grid-cols-3 gap-8 mb-16">
-            <div class="bg-card rounded-lg border p-8 text-center pricing-card">
-                <h3 class="text-4xl font-bold text-primary">10k+</h3>
+        <section class="text-center mb-8 md:mb-16">
+            <h2 class="text-2xl md:text-3xl font-bold mb-8">用户评价</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
+                <div class="bg-card rounded-lg border p-4 md:p-6">
+                    <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/3974b5accbd063ba.png" alt="用户头像" class="w-12 h-12 rounded-full mx-auto mb-4">
+                    <h4 class="font-semibold mb-2">大白萝卜</h4>
+                    <p class="text-sm text-muted-foreground">"不错不错，很棒的项目"</p>
+                </div>
+                <div class="bg-card rounded-lg border p-4 md:p-6">
+                    <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/f2f846d91a1c14d8.jpg" alt="用户头像" class="w-12 h-12 rounded-full mx-auto mb-4">
+                    <h4 class="font-semibold mb-2">柠枺</h4>
+                    <p class="text-sm text-muted-foreground">"很不错的，光看UI不够，中继页设计和账号下管理链接功能都很出色。"</p>
+                </div>
+                <div class="bg-card rounded-lg border p-4 md:p-6">
+                    <img src="https://cdn.mengze.vip/gh/YShenZe/Blog-Static-Resource@main/images/1746460967151.jpg" alt="用户头像" class="w-12 h-12 rounded-full mx-auto mb-4">
+                    <h4 class="font-semibold mb-2">梦泽</h4>
+                    <p class="text-sm text-muted-foreground">"安全可靠，从不担心链接泄露。开源代码值得信赖。"</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid md:grid-cols-3 gap-4 md:gap-8 mb-8 md:mb-16">
+            <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                <h3 class="text-3xl md:text-4xl font-bold text-primary">10k+</h3>
                 <p class="text-muted-foreground">链接已创建</p>
             </div>
-            <div class="bg-card rounded-lg border p-8 text-center pricing-card">
-                <h3 class="text-4xl font-bold text-primary">99.9%</h3>
+            <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                <h3 class="text-3xl md:text-4xl font-bold text-primary">99.9%</h3>
                 <p class="text-muted-foreground">正常运行时间</p>
             </div>
-            <div class="bg-card rounded-lg border p-8 text-center pricing-card">
-                <h3 class="text-4xl font-bold text-primary">1.3s</h3>
+            <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                <h3 class="text-3xl md:text-4xl font-bold text-primary">1.3s</h3>
                 <p class="text-muted-foreground">平均响应时间</p>
             </div>
         </section>
 
-        <!-- CTA Section -->
-        <section class="text-center mb-16">
-            <h2 class="text-3xl font-bold mb-4">准备好缩短您的第一个链接了吗？</h2>
+        <section class="text-center mb-8 md:mb-16">
+            <h2 class="text-2xl md:text-3xl font-bold mb-4">准备好缩短您的第一个链接了吗？</h2>
             <?php if (is_logged_in()): ?>
                 <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
             <?php else: ?>
                 <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
             <?php endif; ?>
+            <a href="/api/docs" class="inline-flex items-center px-8 py-4 bg-secondary text-secondary-foreground rounded-lg transition-colors font-semibold text-lg ml-4">API文档</a>
         </section>
 
-        <!-- Footer -->
         <footer class="pt-8 border-t border-border text-center text-sm text-muted-foreground">
             <p>&copy; 2025 Zuz.Asia. All rights reserved. | <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="text-primary hover:underline">GitHub</a></p>
         </footer>
     </div>
+    <script>
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
+        }
+    </script>
 </body>
 </html>
 <?php

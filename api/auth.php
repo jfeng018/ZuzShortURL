@@ -24,7 +24,7 @@ if ($path === '/login') {
                 $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($user && password_verify($password, $user['password'])) {
                     $_SESSION['user_id'] = $user['id'];
-                    $_SESSION['username'] = $username; // Store username for display
+                    $_SESSION['username'] = $username;
                     header('Location: /dashboard');
                     exit;
                 } else {
@@ -33,7 +33,6 @@ if ($path === '/login') {
             }
         }
     }
-    // Render login page
     ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -198,10 +197,53 @@ if ($path === '/login') {
                 backdrop-filter: blur(2px);
                 -webkit-backdrop-filter: blur(2px);
             }
+
+            .mobile-menu {
+                display: none;
+                z-index: 50;
+            }
+
+            @media (max-width: 768px) {
+                .desktop-menu {
+                    display: none;
+                }
+                .mobile-menu {
+                    display: block;
+                }
+            }
+
+            .mobile-menu {
+                animation: slideDown 0.3s ease-out;
+            }
+
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
         </style>
     </head>
     <body class="bg-background text-foreground min-h-screen flex items-center justify-center">
-        <div class="max-w-md w-full p-6 bg-card rounded-lg border">
+        <nav class="bg-card border-b border-border px-4 py-4 w-full fixed top-0 z-40">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold">Zuz.Asia</h1>
+                <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+                <div class="hidden md:flex space-x-4 desktop-menu">
+                    <a href="/register" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">注册</a>
+                    <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
+                </div>
+                <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                    <a href="/register" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">注册</a>
+                    <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+                </div>
+            </div>
+        </nav>
+        <div class="max-w-md w-full p-6 bg-card rounded-lg border mt-20">
             <h2 class="text-2xl font-bold mb-6 text-center">登录</h2>
             <?php if ($error): ?>
                 <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
@@ -218,13 +260,24 @@ if ($path === '/login') {
                 </div>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">登录</button>
             </form>
-            <p class="mt-4 text-center text-sm">没有账号？<a href="/register" class="text-primary hover:underline">注册</a></p>
+            <?php if (get_setting($pdo, 'allow_register')): ?>
+                <p class="mt-4 text-center text-sm">没有账号？<a href="/register" class="text-primary hover:underline">注册</a></p>
+            <?php endif; ?>
         </div>
+        <script>
+            function toggleMobileMenu() {
+                document.getElementById('mobileMenu').classList.toggle('hidden');
+            }
+        </script>
     </body>
     </html>
     <?php
     exit;
 } elseif ($path === '/register') {
+    if (!get_setting($pdo, 'allow_register')) {
+        header('Location: /admin');
+        exit;
+    }
     if ($method === 'POST') {
         if (!validate_csrf_token($_POST['csrf'] ?? '')) {
             $error = 'CSRF令牌无效。';
@@ -256,7 +309,6 @@ if ($path === '/login') {
             }
         }
     }
-    // Render register page
     ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -421,10 +473,53 @@ if ($path === '/login') {
                 backdrop-filter: blur(2px);
                 -webkit-backdrop-filter: blur(2px);
             }
+
+            .mobile-menu {
+                display: none;
+                z-index: 50;
+            }
+
+            @media (max-width: 768px) {
+                .desktop-menu {
+                    display: none;
+                }
+                .mobile-menu {
+                    display: block;
+                }
+            }
+
+            .mobile-menu {
+                animation: slideDown 0.3s ease-out;
+            }
+
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
         </style>
     </head>
     <body class="bg-background text-foreground min-h-screen flex items-center justify-center">
-        <div class="max-w-md w-full p-6 bg-card rounded-lg border">
+        <nav class="bg-card border-b border-border px-4 py-4 w-full fixed top-0 z-40">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold">Zuz.Asia</h1>
+                <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+                <div class="hidden md:flex space-x-4 desktop-menu">
+                    <a href="/login" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">登录</a>
+                    <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
+                </div>
+                <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                    <a href="/login" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">登录</a>
+                    <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+                </div>
+            </div>
+        </nav>
+        <div class="max-w-md w-full p-6 bg-card rounded-lg border mt-20">
             <h2 class="text-2xl font-bold mb-6 text-center">注册</h2>
             <?php if ($error): ?>
                 <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
@@ -450,12 +545,27 @@ if ($path === '/login') {
             </form>
             <p class="mt-4 text-center text-sm">已有账号？<a href="/login" class="text-primary hover:underline">登录</a></p>
         </div>
+        <script>
+            function toggleMobileMenu() {
+                document.getElementById('mobileMenu').classList.toggle('hidden');
+            }
+        </script>
     </body>
     </html>
     <?php
     exit;
 } elseif ($path === '/logout') {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
     session_destroy();
+    $handler = new DatabaseSessionHandler($pdo);
+    $handler->destroy(session_id());
     header('Location: /');
     exit;
 }

@@ -9,6 +9,7 @@ $users = [];
 $show_list = false;
 $input_token = $_POST['token'] ?? '';
 $valid_token = hash_equals($admin_token, $input_token);
+$active_tab = $_GET['tab'] ?? 'dashboard';
 
 if ($method === 'POST') {
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
@@ -51,8 +52,9 @@ if ($method === 'POST') {
                         }
                     }
                     if (empty($error)) {
+                        $enable_str = $enable_intermediate ? 'true' : 'false';
                         $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-                        $stmt->execute([$code, $longurl, $user_id ?: null, $enable_intermediate ? 'true' : 'false', $expiration ?: null]);
+                        $stmt->execute([$code, $longurl, $user_id ?: null, $enable_str, $expiration ?: null]);
                         $success = '链接添加成功。';
                     }
                 }
@@ -67,8 +69,9 @@ if ($method === 'POST') {
                 if (!filter_var($newurl, FILTER_VALIDATE_URL)) {
                     $error = '无效的新URL。';
                 } else {
+                    $enable_str = $enable_intermediate ? 'true' : 'false';
                     $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, expiration_date = ?, user_id = ? WHERE shortcode = ?");
-                    $stmt->execute([$newurl, $enable_intermediate ? 'true' : 'false', $expiration ?: null, $user_id ?: null, $code]);
+                    $stmt->execute([$newurl, $enable_str, $expiration ?: null, $user_id ?: null, $code]);
                     $success = '链接更新成功。';
                 }
                 break;
@@ -88,19 +91,26 @@ if ($method === 'POST') {
                 $stmt->execute([$user_id]);
                 $success = '用户删除成功。';
                 break;
+            case 'settings':
+                if (!require_admin_auth()) break;
+                $private_mode = isset($_POST['private_mode']);
+                set_setting($pdo, 'private_mode', $private_mode);
+                set_setting($pdo, 'allow_guest', !$private_mode);
+                set_setting($pdo, 'allow_register', !$private_mode);
+                $success = '设置更新成功。';
+                break;
             case 'logout':
                 unset($_SESSION['admin_auth']);
                 $show_list = false;
                 $success = '已登出。';
                 break;
         }
-        if (require_admin_auth()) {
-            $show_list = true;
-        }
     }
 }
 
-if ($show_list && require_admin_auth()) {
+$show_list = require_admin_auth();
+
+if ($show_list) {
     $stmt = $pdo->query("SELECT * FROM short_links ORDER BY created_at DESC");
     $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $pdo->query("SELECT * FROM users ORDER BY created_at DESC");
@@ -110,11 +120,7 @@ if ($show_list && require_admin_auth()) {
     $total_links = $pdo->query("SELECT COUNT(*) as count FROM short_links")->fetch()['count'];
     $total_clicks = $pdo->query("SELECT SUM(clicks) as sum FROM short_links")->fetch()['sum'] ?? 0;
     $click_rate = $total_links > 0 ? round(($total_clicks / $total_links) * 100, 2) : 0;
-} elseif (!require_admin_auth() && $method !== 'POST') {
-    $show_list = false;
 }
-
-// Render admin page
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -280,51 +286,98 @@ if ($show_list && require_admin_auth()) {
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
         }
+
+        .mobile-menu {
+            display: none;
+            z-index: 50;
+        }
+
+        @media (max-width: 768px) {
+            .desktop-menu {
+                display: none;
+            }
+            .mobile-menu {
+                display: block;
+            }
+        }
+
+        .mobile-menu {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
-    <nav class="bg-card border-b border-border px-4 py-4">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Zuz.Asia - 管理面板</h1>
-            <button onclick="toggleSidebar()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md md:hidden">菜单</button>
-        </div>
-    </nav>
-    <div class="flex">
-        <aside id="sidebar" class="sidebar w-64 bg-card border-r border-border p-4 hidden md:block">
-            <nav class="space-y-2">
-                <a href="#dashboard" class="flex items-center px-3 py-2 rounded-md bg-primary text-primary-foreground">数据看板</a>
-                <a href="#links" class="flex items-center px-3 py-2 rounded-md bg-secondary">链接管理</a>
-                <a href="#users" class="flex items-center px-3 py-2 rounded-md bg-secondary">用户管理</a>
+            <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+            <div class="hidden md:flex space-x-4 desktop-menu">
+                <a href="?tab=dashboard" class="px-4 py-2 rounded-md <?php echo $active_tab === 'dashboard' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">数据看板</a>
+                <a href="?tab=links" class="px-4 py-2 rounded-md <?php echo $active_tab === 'links' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">链接管理</a>
+                <a href="?tab=users" class="px-4 py-2 rounded-md <?php echo $active_tab === 'users' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">用户管理</a>
+                <a href="?tab=settings" class="px-4 py-2 rounded-md <?php echo $active_tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">系统设置</a>
                 <form method="post" class="inline">
                     <input type="hidden" name="action" value="logout">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                    <button type="submit" class="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded-md">登出</button>
+                    <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</button>
                 </form>
-            </nav>
-        </aside>
-        <main class="flex-1 p-8 container mx-auto">
-            <?php if ($error): ?>
-                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
-            <?php endif; ?>
-            <?php if ($success): ?>
-                <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
-            <?php endif; ?>
-            <?php if (!$show_list): ?>
-                <div class="max-w-md mx-auto">
-                    <div class="bg-card rounded-lg border p-6">
-                        <h2 class="text-xl font-semibold mb-4">输入管理令牌</h2>
-                        <form method="post">
-                            <input type="hidden" name="action" value="login">
-                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                            <div class="mb-4">
-                                <input type="password" name="token" class="w-full px-3 py-2 border border-input rounded-md" placeholder="管理令牌" required>
-                            </div>
-                            <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">访问面板</button>
-                        </form>
-                    </div>
+            </div>
+            <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                <a href="?tab=dashboard" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'dashboard' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">数据看板</a>
+                <a href="?tab=links" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'links' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">链接管理</a>
+                <a href="?tab=users" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'users' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">用户管理</a>
+                <a href="?tab=settings" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">系统设置</a>
+                <form method="post" class="block">
+                    <input type="hidden" name="action" value="logout">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <button type="submit" class="w-full px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+    <main class="container mx-auto p-4 pt-20">
+        <?php if ($error): ?>
+            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        <?php if (!$show_list): ?>
+            <div class="max-w-md mx-auto">
+                <div class="bg-card rounded-lg border p-6">
+                    <h2 class="text-xl font-semibold mb-4">输入管理令牌</h2>
+                    <form method="post">
+                        <input type="hidden" name="action" value="login">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="mb-4">
+                            <input type="password" name="token" class="w-full px-3 py-2 border border-input rounded-md" placeholder="管理令牌" required>
+                        </div>
+                        <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">访问面板</button>
+                    </form>
                 </div>
-            <?php else: ?>
-                <section id="dashboard" class="mb-8">
+            </div>
+        <?php else: ?>
+            <div class="mb-8">
+                <div class="tabs flex space-x-4 border-b border-border">
+                    <a href="?tab=dashboard" class="px-4 py-2 -mb-px <?php echo $active_tab === 'dashboard' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">数据看板</a>
+                    <a href="?tab=links" class="px-4 py-2 -mb-px <?php echo $active_tab === 'links' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">链接管理</a>
+                    <a href="?tab=users" class="px-4 py-2 -mb-px <?php echo $active_tab === 'users' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">用户管理</a>
+                    <a href="?tab=settings" class="px-4 py-2 -mb-px <?php echo $active_tab === 'settings' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">系统设置</a>
+                </div>
+            </div>
+            <?php if ($active_tab === 'dashboard'): ?>
+                <section>
                     <h2 class="text-2xl font-bold mb-4">数据看板</h2>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div class="bg-card rounded-lg border p-6 text-center">
@@ -345,58 +398,83 @@ if ($show_list && require_admin_auth()) {
                         </div>
                     </div>
                 </section>
-                <section id="links" class="mb-8">
+            <?php elseif ($active_tab === 'links'): ?>
+                <section>
                     <h2 class="text-2xl font-bold mb-4">链接管理</h2>
                     <button onclick="openAddLinkModal()" class="mb-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">+ 添加链接</button>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="space-y-4">
                         <?php foreach ($links as $link): ?>
-                            <div class="bg-card rounded-lg border p-6">
-                                <div class="font-mono text-primary text-lg font-semibold mb-2"><?php echo htmlspecialchars($link['shortcode']); ?></div>
-                                <p class="text-muted-foreground text-sm mb-4 truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
-                                <div class="space-y-2 text-xs text-muted-foreground mb-4">
-                                    <p>用户ID: <?php echo $link['user_id'] ?: '匿名'; ?></p>
-                                    <p>点击: <?php echo $link['clicks']; ?></p>
-                                    <p>创建: <?php echo date('Y-m-d H:i', strtotime($link['created_at'])); ?></p>
-                                    <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
-                                    <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                            <div class="bg-card rounded-lg border p-4 md:p-6">
+                                <div class="flex flex-col md:flex-row md:justify-between md:items-start space-y-2 md:space-y-0">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                            <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                        </div>
+                                        <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
+                                        <div class="text-xs text-muted-foreground mt-2 space-y-1">
+                                            <p>用户ID: <?php echo $link['user_id'] ?: '匿名'; ?></p>
+                                            <p>点击: <?php echo $link['clicks']; ?></p>
+                                            <p>创建: <?php echo date('Y-m-d', strtotime($link['created_at'])); ?></p>
+                                            <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
+                                            <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex space-x-2 mt-2 md:mt-0">
+                                        <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
+                                        <form method="post" class="inline" onsubmit="return confirm('删除?');">
+                                            <input type="hidden" name="action" value="delete_link">
+                                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                            <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                            <button type="submit" class="px-3 py-1 bg-destructive text-destructive-foreground rounded text-xs">删除</button>
+                                        </form>
+                                    </div>
                                 </div>
-                                <div class="space-y-2">
-                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="w-full px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90">编辑</button>
-                                    <form method="post" onsubmit="return confirm('删除?');">
-                                        <input type="hidden" name="action" value="delete_link">
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </section>
+            <?php elseif ($active_tab === 'users'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">用户管理</h2>
+                    <div class="space-y-4">
+                        <?php foreach ($users as $user): ?>
+                            <div class="bg-card rounded-lg border p-4 md:p-6">
+                                <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-2 md:space-y-0">
+                                    <div class="flex-1">
+                                        <div class="font-semibold text-lg"><?php echo htmlspecialchars($user['username']); ?></div>
+                                        <p class="text-sm text-muted-foreground">创建: <?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></p>
+                                    </div>
+                                    <form method="post" class="inline" onsubmit="return confirm('删除用户及其链接?');">
+                                        <input type="hidden" name="action" value="delete_user">
                                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
-                                        <button type="submit" class="w-full px-3 py-1 bg-destructive text-destructive-foreground rounded text-xs hover:bg-destructive/90">删除</button>
+                                        <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                        <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">删除</button>
                                     </form>
                                 </div>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 </section>
-                <section id="users">
-                    <h2 class="text-2xl font-bold mb-4">用户管理</h2>
-                    <div class="space-y-4">
-                        <?php foreach ($users as $user): ?>
-                            <div class="bg-card rounded-lg border p-6 flex justify-between items-center">
-                                <div>
-                                    <p class="font-semibold"><?php echo htmlspecialchars($user['username']); ?></p>
-                                    <p class="text-xs text-muted-foreground">创建: <?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></p>
-                                </div>
-                                <form method="post" onsubmit="return confirm('删除用户及其链接?');">
-                                    <input type="hidden" name="action" value="delete_user">
-                                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                                    <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
-                                    <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">删除</button>
-                                </form>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+            <?php elseif ($active_tab === 'settings'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">系统设置</h2>
+                    <form method="post">
+                        <input type="hidden" name="action" value="settings">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="bg-card rounded-lg border p-6">
+                            <label class="flex items-center space-x-2 mb-4">
+                                <input type="checkbox" name="private_mode" <?php echo get_setting($pdo, 'private_mode') ? 'checked' : ''; ?> class="rounded border-input">
+                                <span class="text-sm font-medium">启用私人模式（禁止游客使用 + 禁止注册，首页重定向管理面板）</span>
+                            </label>
+                            <button type="submit" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
+                        </div>
+                    </form>
                 </section>
             <?php endif; ?>
-        </main>
-    </div>
+        <?php endif; ?>
+    </main>
 
-    <!-- Add Link Modal -->
     <div id="addLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
             <h3 class="text-lg font-semibold mb-4">添加新链接</h3>
@@ -424,7 +502,6 @@ if ($show_list && require_admin_auth()) {
         </div>
     </div>
 
-    <!-- Edit Link Modal -->
     <div id="editLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
             <h3 class="text-lg font-semibold mb-4">编辑链接</h3>
@@ -453,8 +530,8 @@ if ($show_list && require_admin_auth()) {
     </div>
 
     <script>
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('hidden');
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
         }
 
         function openAddLinkModal() {
@@ -476,6 +553,13 @@ if ($show_list && require_admin_auth()) {
 
         function closeEditLinkModal() {
             document.getElementById('editLinkModal').classList.add('hidden');
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
         }
 
         window.onclick = function(event) {

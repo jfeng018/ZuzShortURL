@@ -4,7 +4,12 @@ if (defined('CONFIG_PHP_INCLUDED')) {
 }
 define('CONFIG_PHP_INCLUDED', true);
 
-// Custom Session Handler Class
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Chillerlan\QRCode\QRCode;
+use Chillerlan\QRCode\QROptions;
+use Chillerlan\QRCode\Output\QROutputInterface;
+
 class DatabaseSessionHandler implements SessionHandlerInterface {
     private $pdo;
     private $lifetime;
@@ -48,7 +53,6 @@ class DatabaseSessionHandler implements SessionHandlerInterface {
     }
 }
 
-// Parse environment variables
 $db_url = parse_url(getenv('DATABASE_URL'));
 $host = $db_url['host'];
 $port = $db_url['port'] ?? 5432;
@@ -57,11 +61,9 @@ $user = $db_url['user'];
 $pass = $db_url['pass'];
 $admin_token = getenv('ADMIN_TOKEN');
 
-// Database connection
 try {
     $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Create tables if not exists
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS short_links (
             id SERIAL PRIMARY KEY,
@@ -99,11 +101,18 @@ try {
             sess_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ");
-    // Reset sequence
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS settings (
+            \"key\" VARCHAR(50) PRIMARY KEY,
+            value BOOLEAN DEFAULT true
+        )
+    ");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', true) ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', true) ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', false) ON CONFLICT (\"key\") DO NOTHING");
     $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
     $pdo->exec("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);");
     
-    // Register DB Session Handler
     $handler = new DatabaseSessionHandler($pdo);
     session_set_save_handler($handler, true);
     session_start();
@@ -112,13 +121,11 @@ try {
     die('数据库连接失败: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
 }
 
-// Security headers
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
-// Helper functions
 function generate_csrf_token() {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -208,6 +215,35 @@ function require_admin_auth() {
         return false;
     }
     return true;
+}
+
+function get_setting($pdo, $key) {
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE \"key\" = ?");
+    $stmt->execute([$key]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ? $row['value'] : true;
+}
+
+function set_setting($pdo, $key, $value) {
+    $bool_str = $value ? 'true' : 'false';
+    $stmt = $pdo->prepare("INSERT INTO settings (\"key\", value) VALUES (?, ?) ON CONFLICT (\"key\") DO UPDATE SET value = ?");
+    $stmt->execute([$key, $bool_str, $bool_str]);
+}
+
+function generate_qr_code($url) {
+    try {
+        $options = new QROptions([
+            'version'    => 5,
+            'outputType' => QRCode::OUTPUT_IMAGE_PNG,
+            'eccLevel'   => QRCode::ECC_L,
+            'scale'      => 5,
+            'imageBase64' => true
+        ]);
+        $qrcode = new QRCode($options);
+        return $qrcode->render($url);
+    } catch (Exception $e) {
+        return '';
+    }
 }
 
 $reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];

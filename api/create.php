@@ -1,10 +1,16 @@
 <?php
 require_once 'config.php';
 
+if (!get_setting($pdo, 'allow_guest') && !is_logged_in()) {
+    header('Location: /login');
+    exit;
+}
+
 $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
 $short_url = '';
+$code = '';
 $user_id = is_logged_in() ? get_current_user_id() : null;
 
 if ($method === 'POST') {
@@ -36,21 +42,19 @@ if ($method === 'POST') {
                 }
             }
             if (empty($error)) {
+                $enable_str = $enable_intermediate ? 'true' : 'false';
                 $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([$code, $longurl, $user_id, $enable_intermediate ? 'true' : 'false', $expiration ?: null]);
-                $short_url = $base_url . '/' . $code;  // 修复：使用全局变量 $base_url，而非函数调用
+                $stmt->execute([$code, $longurl, $user_id, $enable_str, $expiration ?: null]);
+                $short_url = $base_url . '/' . $code;
                 $success = '短链接创建成功！';
-                // Update cookie history
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
                 $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_url, 'created_at' => time()];
-                $history = array_slice($history, -5); // Keep last 5 entries
+                $history = array_slice($history, -5);
                 setcookie('short_history', json_encode($history), time() + (30 * 24 * 3600), '/');
             }
         }
     }
 }
-
-// Render create page
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -215,38 +219,71 @@ if ($method === 'POST') {
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
         }
+
+        .mobile-menu {
+            display: none;
+            z-index: 50;
+        }
+
+        @media (max-width: 768px) {
+            .desktop-menu {
+                display: none;
+            }
+            .mobile-menu {
+                display: block;
+            }
+        }
+
+        .mobile-menu {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
-    <nav class="bg-card border-b border-border px-4 py-4">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Zuz.Asia</h1>
-            <?php if (is_logged_in()): ?>
-                <div class="space-x-4">
+            <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+            <div class="hidden md:flex space-x-4 desktop-menu">
+                <?php if (is_logged_in()): ?>
                     <span class="text-muted-foreground">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
                     <a href="/dashboard" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">控制台</a>
                     <a href="/logout" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">登出</a>
-                </div>
-            <?php else: ?>
-                <div class="space-x-4">
+                <?php else: ?>
                     <a href="/login" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">登录</a>
                     <a href="/register" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">注册</a>
-                </div>
-            <?php endif; ?>
+                <?php endif; ?>
+                <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
+            </div>
+            <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                <?php if (is_logged_in()): ?>
+                    <span class="text-muted-foreground block">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                    <a href="/dashboard" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">控制台</a>
+                    <a href="/logout" class="block px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</a>
+                <?php else: ?>
+                    <a href="/login" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">登录</a>
+                    <a href="/register" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">注册</a>
+                <?php endif; ?>
+                <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+            </div>
         </div>
     </nav>
-    <div class="container mx-auto p-8">
+    <div class="container mx-auto p-4 pt-20">
         <div class="max-w-lg mx-auto bg-card rounded-lg border p-6">
             <h2 class="text-2xl font-bold mb-6 text-center">创建短链接</h2>
             <?php if ($error): ?>
                 <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
-            <?php endif; ?>
-            <?php if ($success): ?>
-                <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
-                <div class="mb-4">
-                    <p class="text-sm text-muted-foreground">您的短链接:</p>
-                    <a href="<?php echo htmlspecialchars($short_url); ?>" class="text-primary font-mono break-all" target="_blank"><?php echo htmlspecialchars($short_url); ?></a>
-                </div>
             <?php endif; ?>
             <form method="post">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -270,14 +307,23 @@ if ($method === 'POST') {
                 </div>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">创建短链接</button>
             </form>
+            <?php if ($success): ?>
+                <div class="mt-6 bg-secondary/50 border border-secondary/30 rounded-md p-4">
+                    <p class="text-sm text-muted-foreground mb-2">您的短链接:</p>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="shortUrl" value="<?php echo htmlspecialchars($short_url); ?>" readonly class="flex-1 px-3 py-2 border border-input rounded-md bg-background">
+                        <button onclick="copyToClipboard('shortUrl')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded">复制</button>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
         <?php if (isset($_COOKIE['short_history'])): ?>
-            <div class="mt-8 max-w-lg mx-auto bg-card rounded-lg border p-6">
+            <div class="mt-6 max-w-lg mx-auto bg-card rounded-lg border p-6">
                 <h3 class="text-lg font-bold mb-4">最近创建的链接</h3>
                 <ul class="space-y-2">
-                    <?php foreach (json_decode($_COOKIE['short_history'], true) as $item): ?>
+                    <?php $history = json_decode($_COOKIE['short_history'], true); foreach ($history as $item): ?>
                         <li class="flex justify-between items-center text-sm">
-                            <div>
+                            <div class="flex-1">
                                 <a href="<?php echo htmlspecialchars($item['shorturl']); ?>" class="text-primary font-mono" target="_blank"><?php echo htmlspecialchars($item['shorturl']); ?></a>
                                 <p class="text-muted-foreground truncate" title="<?php echo htmlspecialchars($item['longurl']); ?>"><?php echo htmlspecialchars($item['longurl']); ?></p>
                             </div>
@@ -291,6 +337,18 @@ if ($method === 'POST') {
     <footer class="mt-12 pt-8 border-t border-border text-center text-sm text-muted-foreground">
         <p>&copy; 2025 Zuz.Asia. All rights reserved. | <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="text-primary hover:underline">GitHub</a></p>
     </footer>
+    <script>
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
+        }
+    </script>
 </body>
 </html>
 <?php

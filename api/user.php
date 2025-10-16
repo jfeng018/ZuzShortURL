@@ -45,8 +45,9 @@ if ($method === 'POST') {
                     }
                 }
                 if (empty($error)) {
+                    $enable_str = $enable_intermediate ? 'true' : 'false';
                     $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-                    $stmt->execute([$code, $longurl, $user_id, $enable_intermediate ? 'true' : 'false', $expiration ?: null]);
+                    $stmt->execute([$code, $longurl, $user_id, $enable_str, $expiration ?: null]);
                     $success = '链接添加成功。';
                 }
             }
@@ -62,8 +63,9 @@ if ($method === 'POST') {
             } elseif (!filter_var($newurl, FILTER_VALIDATE_URL)) {
                 $error = '无效的新URL。';
             } else {
+                $enable_str = $enable_intermediate ? 'true' : 'false';
                 $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, expiration_date = ? WHERE shortcode = ?");
-                $stmt->execute([$newurl, $enable_intermediate ? 'true' : 'false', $expiration ?: null, $code]);
+                $stmt->execute([$newurl, $enable_str, $expiration ?: null, $code]);
                 $success = '链接更新成功。';
             }
         } elseif ($action === 'delete') {
@@ -81,8 +83,6 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $total_links = count($links);
 $total_clicks = array_sum(array_column($links, 'clicks'));
-
-// Render user dashboard
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -247,20 +247,57 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
         }
+
+        .mobile-menu {
+            display: none;
+            z-index: 50;
+        }
+
+        @media (max-width: 768px) {
+            .desktop-menu {
+                display: none;
+            }
+            .mobile-menu {
+                display: block;
+            }
+        }
+
+        .mobile-menu {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
-    <nav class="bg-card border-b border-border px-4 py-4">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Zuz.Asia</h1>
-            <div>
+            <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+            <div class="hidden md:flex space-x-4 desktop-menu">
                 <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
                 <a href="/dashboard" class="ml-4 px-4 py-2 bg-primary text-primary-foreground rounded-md">控制台</a>
                 <a href="/logout" class="ml-4 px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</a>
+                <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+            </div>
+            <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                <span class="block text-muted-foreground"><?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                <a href="/dashboard" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">控制台</a>
+                <a href="/logout" class="block px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</a>
+                <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
             </div>
         </div>
     </nav>
-    <main class="container mx-auto p-8">
+    <main class="container mx-auto p-4 pt-20">
         <?php if ($error): ?>
             <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
@@ -268,16 +305,17 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
         <div class="flex justify-between mb-4">
-            <div>
-                <a href="?sort=time" class="px-4 py-2 bg-secondary rounded-md mr-2">时间排序</a>
-                <a href="?sort=clicks" class="px-4 py-2 bg-secondary rounded-md">流量排序</a>
-            </div>
+                <a href="?sort=time" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">时间排序</a>
+                <a href="?sort=clicks" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">流量排序</a>
             <button onclick="openAddModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md">+ 新建链接</button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <?php foreach ($links as $link): ?>
-                <div class="bg-card rounded-lg border p-6">
-                    <div class="font-mono text-primary text-lg font-semibold mb-2"><?php echo htmlspecialchars($link['shortcode']); ?></div>
+                <div class="bg-card rounded-lg border p-4">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                        <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                    </div>
                     <p class="text-muted-foreground text-sm mb-4 truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
                     <div class="space-y-2 text-xs text-muted-foreground mb-4">
                         <p>点击: <?php echo htmlspecialchars($link['clicks']); ?></p>
@@ -285,9 +323,9 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                         <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
                         <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
                     </div>
-                    <div class="space-y-2">
-                        <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="w-full px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
-                        <form method="post" onsubmit="return confirm('删除?');">
+                    <div class="flex space-x-2">
+                        <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="flex-1 px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
+                        <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                             <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
@@ -315,7 +353,6 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
         <p>&copy; 2025 Zuz.Asia. All rights reserved.</p>
     </footer>
 
-    <!-- Add Modal -->
     <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
             <h3 class="text-lg font-semibold mb-4">添加新短链接</h3>
@@ -342,7 +379,6 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
         </div>
     </div>
 
-    <!-- Edit Modal -->
     <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
         <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
             <h3 class="text-lg font-semibold mb-4">编辑短链接</h3>
@@ -392,11 +428,22 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             document.getElementById('editForm').reset();
         }
 
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
+        }
+
         window.onclick = function(event) {
             const addModal = document.getElementById('addModal');
             const editModal = document.getElementById('editModal');
             if (event.target === addModal) closeAddModal();
             if (event.target === editModal) closeEditModal();
+        }
+
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
         }
     </script>
 </body>
