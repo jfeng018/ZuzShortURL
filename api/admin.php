@@ -402,45 +402,88 @@ if ($show_list) {
                 <section>
                     <h2 class="text-2xl font-bold mb-4">链接管理</h2>
                     <button onclick="openAddLinkModal()" class="mb-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">+ 添加链接</button>
-                    <div class="space-y-4">
+                    <div class="md:hidden space-y-4">
                         <?php foreach ($links as $link): ?>
-                            <div class="bg-card rounded-lg border p-4 md:p-6">
-                                <div class="flex flex-col md:flex-row md:justify-between md:items-start space-y-2 md:space-y-0">
-                                    <div class="flex-1">
-                                        <div class="flex items-center space-x-2 mb-2">
-                                            <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
-                                            <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
-                                        </div>
-                                        <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
-                                        <div class="text-xs text-muted-foreground mt-2 space-y-1">
-                                            <p>用户ID: <?php echo $link['user_id'] ?: '匿名'; ?></p>
-                                            <p>点击: <?php echo $link['clicks']; ?></p>
-                                            <p>创建: <?php echo date('Y-m-d', strtotime($link['created_at'])); ?></p>
-                                            <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
-                                            <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
-                                        </div>
-                                    </div>
-                                    <div class="flex space-x-2 mt-2 md:mt-0">
-                                        <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
-                                        <form method="post" class="inline" onsubmit="return confirm('删除?');">
-                                            <input type="hidden" name="action" value="delete_link">
-                                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                                            <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
-                                            <button type="submit" class="px-3 py-1 bg-destructive text-destructive-foreground rounded text-xs">删除</button>
-                                        </form>
-                                    </div>
+                            <div class="bg-card rounded-lg border p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                </div>
+                                <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
+                                <div class="text-xs text-muted-foreground mt-2 space-y-1">
+                                    <p>用户ID: <?php echo $link['user_id'] ?: '匿名'; ?></p>
+                                    <p>点击: <?php echo $link['clicks']; ?></p>
+                                    <p>创建: <?php echo date('Y-m-d', strtotime($link['created_at'])); ?></p>
+                                    <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
+                                    <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                                </div>
+                                <div class="flex space-x-2 mt-4">
+                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
+                                    <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
+                                        <input type="hidden" name="action" value="delete_link">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                        <button type="submit" class="w-full px-3 py-1 bg-destructive text-destructive-foreground rounded text-xs">删除</button>
+                                    </form>
                                 </div>
                             </div>
                         <?php endforeach; ?>
+                    </div>
+                    <div class="hidden md:block overflow-x-auto">
+                        <table class="min-w-full bg-card rounded-lg border border-border">
+                            <thead>
+                                <tr class="border-b border-border">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">短链接</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">长链接</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">用户ID</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">点击量</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">过期时间</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">中继页</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border">
+                                <?php foreach ($links as $link): ?>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center space-x-2">
+                                                <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-muted-foreground truncate max-w-xs" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['user_id'] ?: '匿名'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['clicks']; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d', strtotime($link['created_at'])); ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
+                                            <div class="flex space-x-2 justify-end">
+                                                <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                                <form method="post" class="inline" onsubmit="return confirm('删除?');">
+                                                    <input type="hidden" name="action" value="delete_link">
+                                                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                                    <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                    <button type="submit" class="bg-destructive text-destructive-foreground px-3 py-1 rounded">删除</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             <?php elseif ($active_tab === 'users'): ?>
                 <section>
                     <h2 class="text-2xl font-bold mb-4">用户管理</h2>
-                    <div class="space-y-4">
+                    <div class="md:hidden space-y-4">
                         <?php foreach ($users as $user): ?>
-                            <div class="bg-card rounded-lg border p-4 md:p-6">
-                                <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-2 md:space-y-0">
+                            <div class="bg-card rounded-lg border p-4">
+                                <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-2">
                                     <div class="flex-1">
                                         <div class="font-semibold text-lg"><?php echo htmlspecialchars($user['username']); ?></div>
                                         <p class="text-sm text-muted-foreground">创建: <?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></p>
@@ -454,6 +497,35 @@ if ($show_list) {
                                 </div>
                             </div>
                         <?php endforeach; ?>
+                    </div>
+                    <div class="hidden md:block overflow-x-auto">
+                        <table class="min-w-full bg-card rounded-lg border border-border">
+                            <thead>
+                                <tr class="border-b border-border">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">用户名</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border">
+                                <?php foreach ($users as $user): ?>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium"><?php echo htmlspecialchars($user['username']); ?></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <form method="post" class="inline" onsubmit="return confirm('删除用户及其链接?');">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                                <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                                <button type="submit" class="bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90">删除</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             <?php elseif ($active_tab === 'settings'): ?>
