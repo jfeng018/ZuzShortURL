@@ -196,7 +196,11 @@ if (isset($_COOKIE['short_history'])) {
             <h1 class="text-5xl md:text-7xl font-bold mb-6">Zuz.Asia</h1>
             <p class="text-xl text-muted-foreground max-w-3xl mx-auto mb-8">无需注册，即时创建短链接。简单、高效、安全。享受无缝的链接管理体验。我们的免费计划让您轻松开始。</p>
             <div class="space-x-4">
-                <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+                <?php if (is_logged_in()): ?>
+                    <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+                <?php else: ?>
+                    <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+                <?php endif; ?>
             </div>
         </section>
 
@@ -216,19 +220,46 @@ if (isset($_COOKIE['short_history'])) {
             </div>
         </section>
 
-        <!-- Pricing Section - Only Free Plan -->
+        <!-- Pricing Section -->
         <section class="text-center mb-16">
             <h2 class="text-3xl font-bold mb-8">选择您的计划</h2>
-            <div class="max-w-md mx-auto bg-card rounded-lg border p-8 pricing-card">
-                <h3 class="text-2xl font-bold mb-4">免费版</h3>
-                <ul class="space-y-2 text-left mb-6">
-                    <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限短链接</li>
-                    <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本统计</li>
-                    <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
-                    <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 速率限制</li>
-                </ul>
-                <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
-                <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <!-- Free Plan -->
+                <div class="bg-card rounded-lg border p-8 pricing-card">
+                    <h3 class="text-2xl font-bold mb-4">免费版</h3>
+                    <ul class="space-y-2 text-left mb-6">
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限短链接</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本统计</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
+                        <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 速率限制</li>
+                    </ul>
+                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
+                </div>
+                <!-- Registered User Plan -->
+                <div class="bg-card rounded-lg border p-8 pricing-card">
+                    <h3 class="text-2xl font-bold mb-4">注册用户套餐</h3>
+                    <ul class="space-y-2 text-left mb-6">
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 管理个人链接</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 高级统计数据</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 中继页设置</li>
+                    </ul>
+                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
+                </div>
+                <!-- Self-Hosted Plan -->
+                <div class="bg-card rounded-lg border p-8 pricing-card">
+                    <h3 class="text-2xl font-bold mb-4">自建用户套餐</h3>
+                    <ul class="space-y-2 text-left mb-6">
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全自由控制</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自托管部署</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义功能</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 开源免费</li>
+                    </ul>
+                    <p class="text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
+                    <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
+                </div>
             </div>
         </section>
 
@@ -251,7 +282,11 @@ if (isset($_COOKIE['short_history'])) {
         <!-- CTA Section -->
         <section class="text-center mb-16">
             <h2 class="text-3xl font-bold mb-4">准备好缩短您的第一个链接了吗？</h2>
-            <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">Get Started 免费</a>
+            <?php if (is_logged_in()): ?>
+                <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+            <?php else: ?>
+                <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+            <?php endif; ?>
         </section>
 
         <!-- Footer -->
