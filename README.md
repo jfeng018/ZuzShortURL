@@ -3,6 +3,8 @@
 如果你不想自己维护数据库，可直接使用 Supabase 提供的免费 PostgreSQL 方案，**5 分钟上线**。
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d9aeb70eb59385c8.jpg" alt="d9aeb70eb59385c8.jpg" title="d9aeb70eb59385c8.jpg" />
 
+*Release仅用于版本发布，使用时请Frok本仓库或点击一键部署。
+
 ## 环境变量格式
 
 项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。
