@@ -4,6 +4,7 @@
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" />
 
 *Release仅用于版本发布，使用时请Frok本仓库或点击一键部署。
+*很抱歉，由于PHP和Vercel的一些冲突，导致二维码和图形验证码一直没上线，以及目录结构混乱，正在寻找解决方法
 
 ## 环境变量格式
 

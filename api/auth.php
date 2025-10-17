@@ -234,11 +234,15 @@ if ($path === '/login') {
                 <h1 class="text-2xl font-bold">Zuz.Asia</h1>
                 <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
                 <div class="hidden md:flex space-x-4 desktop-menu">
+                    <?php if (get_setting($pdo, 'allow_register')): ?>
                     <a href="/register" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">注册</a>
+                    <?php endif; ?>
                     <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
                 </div>
                 <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                    <?php if (get_setting($pdo, 'allow_register')): ?>
                     <a href="/register" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">注册</a>
+                    <?php endif; ?>
                     <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
                 </div>
             </div>

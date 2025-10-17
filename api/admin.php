@@ -30,6 +30,9 @@ if ($method === 'POST') {
                 $longurl = trim($_POST['url'] ?? '');
                 $custom_code = trim($_POST['custom_code'] ?? '');
                 $enable_intermediate = isset($_POST['enable_intermediate']) ? true : false;
+                $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+                $link_password = trim($_POST['link_password'] ?? '');
+                $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
                 $expiration = $_POST['expiration'] ?? null;
                 $user_id = $_POST['user_id'] ?? null;
                 if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
@@ -53,8 +56,8 @@ if ($method === 'POST') {
                     }
                     if (empty($error)) {
                         $enable_str = $enable_intermediate ? 'true' : 'false';
-                        $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-                        $stmt->execute([$code, $longurl, $user_id ?: null, $enable_str, $expiration ?: null]);
+                        $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([$code, $longurl, $user_id ?: null, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
                         $success = '链接添加成功。';
                     }
                 }
@@ -64,14 +67,17 @@ if ($method === 'POST') {
                 $code = $_POST['code'] ?? '';
                 $newurl = trim($_POST['newurl'] ?? '');
                 $enable_intermediate = isset($_POST['enable_intermediate']) ? true : false;
+                $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+                $link_password = trim($_POST['link_password'] ?? '');
+                $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
                 $expiration = $_POST['expiration'] ?? null;
                 $user_id = $_POST['user_id'] ?? null;
                 if (!filter_var($newurl, FILTER_VALIDATE_URL)) {
                     $error = '无效的新URL。';
                 } else {
                     $enable_str = $enable_intermediate ? 'true' : 'false';
-                    $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, expiration_date = ?, user_id = ? WHERE shortcode = ?");
-                    $stmt->execute([$newurl, $enable_str, $expiration ?: null, $user_id ?: null, $code]);
+                    $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ?, user_id = ? WHERE shortcode = ?");
+                    $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $user_id ?: null, $code]);
                     $success = '链接更新成功。';
                 }
                 break;
@@ -94,9 +100,11 @@ if ($method === 'POST') {
             case 'settings':
                 if (!require_admin_auth()) break;
                 $private_mode = isset($_POST['private_mode']);
+                $allow_guest = isset($_POST['allow_guest']);
+                $allow_register = isset($_POST['allow_register']);
                 set_setting($pdo, 'private_mode', $private_mode);
-                set_setting($pdo, 'allow_guest', !$private_mode);
-                set_setting($pdo, 'allow_register', !$private_mode);
+                set_setting($pdo, 'allow_guest', $allow_guest);
+                set_setting($pdo, 'allow_register', $allow_register);
                 $success = '设置更新成功。';
                 break;
             case 'logout':
@@ -315,6 +323,51 @@ if ($show_list) {
                 transform: translateY(0);
             }
         }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
@@ -416,9 +469,11 @@ if ($show_list) {
                                     <p>创建: <?php echo date('Y-m-d', strtotime($link['created_at'])); ?></p>
                                     <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
                                     <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                                    <p>延迟: <?php echo $link['redirect_delay']; ?>s</p>
+                                    <p>密码保护: <?php echo $link['link_password'] ? '是' : '否'; ?></p>
                                 </div>
                                 <div class="flex space-x-2 mt-4">
-                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
+                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
                                     <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
                                         <input type="hidden" name="action" value="delete_link">
                                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -440,6 +495,8 @@ if ($show_list) {
                                     <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">过期时间</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">中继页</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">延迟</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">密码</th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
                                 </tr>
                             </thead>
@@ -460,9 +517,11 @@ if ($show_list) {
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d', strtotime($link['created_at'])); ?></td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['redirect_delay']; ?>s</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['link_password'] ? '是' : '否'; ?></td>
                                         <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
                                             <div class="flex space-x-2 justify-end">
-                                                <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                                <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
                                                 <form method="post" class="inline" onsubmit="return confirm('删除?');">
                                                     <input type="hidden" name="action" value="delete_link">
                                                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -534,12 +593,23 @@ if ($show_list) {
                     <form method="post">
                         <input type="hidden" name="action" value="settings">
                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                        <div class="bg-card rounded-lg border p-6">
-                            <label class="flex items-center space-x-2 mb-4">
-                                <input type="checkbox" name="private_mode" <?php echo get_setting($pdo, 'private_mode') ? 'checked' : ''; ?> class="rounded border-input">
-                                <span class="text-sm font-medium">启用私人模式（禁止游客使用 + 禁止注册，首页重定向管理面板）</span>
-                            </label>
-                            <button type="submit" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
+                        <div class="bg-card rounded-lg border p-6 space-y-4">
+                            
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">允许未注册用户使用（默认允许）</span>
+                                <label class="switch">
+                                    <input type="checkbox" name="allow_guest" <?php echo get_setting($pdo, 'allow_guest') ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">允许用户注册（默认允许）</span>
+                                <label class="switch">
+                                    <input type="checkbox" name="allow_register" <?php echo get_setting($pdo, 'allow_register') ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <button type="submit" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
                         </div>
                     </form>
                 </section>
@@ -557,10 +627,21 @@ if ($show_list) {
                     <input type="url" name="url" class="w-full px-3 py-2 border border-input rounded-md" placeholder="https://example.com" required>
                     <input type="text" name="custom_code" class="w-full px-3 py-2 border border-input rounded-md" placeholder="自定义短码（可选）" maxlength="10">
                     <input type="number" name="user_id" class="w-full px-3 py-2 border border-input rounded-md" placeholder="用户ID（可选）">
-                    <label class="flex items-center space-x-2">
-                        <input type="checkbox" name="enable_intermediate" class="rounded border-input">
+                    <div class="flex items-center justify-between">
                         <span class="text-sm">开启转跳中继页</span>
-                    </label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" class="w-full px-3 py-2 border border-input rounded-md" min="0" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选）</label>
+                        <input type="password" name="link_password" class="w-full px-3 py-2 border border-input rounded-md" placeholder="设置密码以加密链接">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                         <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
@@ -584,10 +665,21 @@ if ($show_list) {
                 <div class="space-y-3">
                     <input type="url" name="newurl" id="editLinkUrl" class="w-full px-3 py-2 border border-input rounded-md" required>
                     <input type="number" name="user_id" id="editLinkUserId" class="w-full px-3 py-2 border border-input rounded-md" placeholder="用户ID">
-                    <label class="flex items-center space-x-2">
-                        <input type="checkbox" name="enable_intermediate" id="editLinkIntermediate" class="rounded border-input">
+                    <div class="flex items-center justify-between">
                         <span class="text-sm">开启转跳中继页</span>
-                    </label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate" id="editLinkIntermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" id="editLinkDelay" class="w-full px-3 py-2 border border-input rounded-md" min="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选，留空不修改）</label>
+                        <input type="password" name="link_password" id="editLinkPassword" class="w-full px-3 py-2 border border-input rounded-md" placeholder="新密码">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                         <input type="date" name="expiration" id="editLinkExpiration" class="w-full px-3 py-2 border border-input rounded-md">
@@ -614,10 +706,12 @@ if ($show_list) {
             document.getElementById('addLinkModal').classList.add('hidden');
         }
 
-        function openEditLinkModal(code, url, enableIntermediate, expiration, userId) {
+        function openEditLinkModal(code, url, enableIntermediate, delay, password, expiration, userId) {
             document.getElementById('editLinkCode').value = code;
             document.getElementById('editLinkUrl').value = url;
             document.getElementById('editLinkIntermediate').checked = enableIntermediate;
+            document.getElementById('editLinkDelay').value = delay;
+            document.getElementById('editLinkPassword').value = password;
             document.getElementById('editLinkExpiration').value = expiration ? expiration.split(' ')[0] : '';
             document.getElementById('editLinkUserId').value = userId;
             document.getElementById('editLinkModal').classList.remove('hidden');

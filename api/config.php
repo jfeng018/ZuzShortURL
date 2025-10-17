@@ -71,6 +71,8 @@ try {
             longurl TEXT NOT NULL,
             user_id INT DEFAULT NULL,
             enable_intermediate_page BOOLEAN DEFAULT FALSE,
+            redirect_delay INT DEFAULT 0,
+            link_password TEXT DEFAULT NULL,
             expiration_date TIMESTAMP DEFAULT NULL,
             clicks INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -78,6 +80,8 @@ try {
     ");
     $pdo->exec("ALTER TABLE IF EXISTS short_links ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;");
     $pdo->exec("ALTER TABLE IF EXISTS short_links ADD COLUMN IF NOT EXISTS expiration_date TIMESTAMP DEFAULT NULL;");
+    $pdo->exec("ALTER TABLE IF EXISTS short_links ADD COLUMN IF NOT EXISTS redirect_delay INT DEFAULT 0;");
+    $pdo->exec("ALTER TABLE IF EXISTS short_links ADD COLUMN IF NOT EXISTS link_password TEXT DEFAULT NULL;");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -107,7 +111,7 @@ try {
             value BOOLEAN DEFAULT true
         )
     ");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', true) ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', false) ON CONFLICT (\"key\") DO NOTHING");
     $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', true) ON CONFLICT (\"key\") DO NOTHING");
     $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', false) ON CONFLICT (\"key\") DO NOTHING");
     $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
@@ -221,7 +225,7 @@ function get_setting($pdo, $key) {
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE \"key\" = ?");
     $stmt->execute([$key]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? $row['value'] : true;
+    return $row ? $row['value'] : ($key === 'allow_guest' ? false : true);
 }
 
 function set_setting($pdo, $key, $value) {

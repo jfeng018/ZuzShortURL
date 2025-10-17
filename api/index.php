@@ -5,13 +5,12 @@ $request_uri = $_SERVER['REQUEST_URI'];
 $path = parse_url($request_uri, PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-if (get_setting($pdo, 'private_mode')) {
-    if ($path === '/' || $path === '/create') {
-        if (!require_admin_auth()) {
-            header('Location: /admin');
-            exit;
-        }
-    }
+$private_mode = get_setting($pdo, 'private_mode');
+$require_admin = $private_mode && !require_admin_auth();
+
+if ($require_admin && ($path === '/' || $path === '/create' || $path === '/login' || $path === '/register' || $path === '/dashboard')) {
+    header('Location: /admin');
+    exit;
 }
 
 if ($path === '/' || $path === '') {
@@ -45,6 +44,9 @@ if ($path === '/' || $path === '') {
     $longurl = trim($input['url'] ?? '');
     $custom_code = trim($input['custom_code'] ?? '');
     $enable_intermediate = $input['enable_intermediate'] ?? false;
+    $redirect_delay = isset($input['redirect_delay']) ? (int)$input['redirect_delay'] : 0;
+    $link_password = trim($input['link_password'] ?? '');
+    $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
     $expiration = $input['expiration'] ?? null;
     $user_id = is_logged_in() ? get_current_user_id() : null;
     $response = ['success' => false, 'message' => ''];
@@ -74,8 +76,8 @@ if ($path === '/' || $path === '') {
         }
     }
     $enable_str = $enable_intermediate ? 'true' : 'false';
-    $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$code, $longurl, $user_id, $enable_str, $expiration ?: null]);
+    $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
     $short_url = $base_url . '/' . $code;
     $response['success'] = true;
     $response['short_url'] = $short_url;

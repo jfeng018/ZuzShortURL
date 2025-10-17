@@ -268,11 +268,11 @@ if (isset($_COOKIE['short_history'])) {
                 <p class="text-lg md:text-xl text-muted-foreground max-w-md">Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建的便利。</p>
                 <div class="space-x-4 mt-6">
                     <?php if (is_logged_in()): ?>
-                        <a href="/dashboard" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+                        <a href="/dashboard" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
                     <?php else: ?>
-                        <a href="/create" class="inline-flex items-center px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
+                        <a href="/create" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">免费开始</a>
                     <?php endif; ?>
-                    <a href="/api/docs" class="inline-flex items-center px-8 py-4 bg-secondary text-secondary-foreground rounded-lg transition-colors font-semibold text-lg">API文档</a>
+                    <a href="/api/docs" class="inline-flex items-center px-6 py-3 bg-secondary text-secondary-foreground rounded-lg transition-colors font-semibold text-lg">API文档</a>
                 </div>
             </div>
             <div class="md:w-1/2">
@@ -296,64 +296,64 @@ if (isset($_COOKIE['short_history'])) {
         </section>
 
         <section class="text-center mb-8 md:mb-16">
-            <h2 class="text-2xl md:text-3xl font-bold mb-8">选择您的计划</h2>
-            <div class="grid md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <div class="text-center mb-4">
-                        <div class="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-full dark:bg-blue-900/20 flex items-center justify-center">
-                            <span class="text-blue-600 text-xl">🎯</span>
-                        </div>
-                        <h3 class="text-xl md:text-2xl font-bold">免费版</h3>
-                    </div>
-                    <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限创建短链接</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本点击统计</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 支持自定义短码</li>
-                        <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 轻度速率限制</li>
-                    </ul>
-                    <div class="border-t border-border pt-4 text-center">
-                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
-                        <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
-                    </div>
+    <h2 class="text-2xl md:text-3xl font-bold mb-8">选择您的计划</h2>
+    <div class="grid md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
+        <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 mx-auto mb-3 bg-purple-100 rounded-full dark:bg-purple-900/20 flex items-center justify-center">
+                    <span class="text-purple-600 text-xl">⭐</span>
                 </div>
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card popular">
-                    <div class="text-center mb-4">
-                        <div class="w-12 h-12 mx-auto mb-3 bg-green-100 rounded-full dark:bg-green-900/20 flex items-center justify-center">
-                            <span class="text-green-600 text-xl">👤</span>
-                        </div>
-                        <h3 class="text-xl md:text-2xl font-bold">注册用户套餐</h3>
-                    </div>
-                    <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 个人链接管理面板</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 详细访问统计</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限自定义短码</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义中继页设计</li>
-                    </ul>
-                    <div class="border-t border-border pt-4 text-center">
-                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
-                        <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
-                    </div>
-                </div>
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <div class="text-center mb-4">
-                        <div class="w-12 h-12 mx-auto mb-3 bg-purple-100 rounded-full dark:bg-purple-900/20 flex items-center justify-center">
-                            <span class="text-purple-600 text-xl">⚙️</span>
-                        </div>
-                        <h3 class="text-xl md:text-2xl font-bold">自建用户套餐</h3>
-                    </div>
-                    <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全数据控制权</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 一键自托管部署</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自由扩展功能</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 100% 开源免费</li>
-                    </ul>
-                    <div class="border-t border-border pt-4 text-center">
-                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
-                        <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
-                    </div>
-                </div>
+                <h3 class="text-xl md:text-2xl font-bold">Pro</h3>
             </div>
-        </section>
+            <ul class="space-y-2 text-left mb-6">
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 免费无限量Pages</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义域名</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 新功能体验</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 高级支持</li>
+            </ul>
+            <div class="border-t border-border pt-4 text-center">
+                <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$22 / 月</p>
+                <button class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md transition-colors font-semibold">套餐暂未上线</button>
+            </div>
+        </div>
+        <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card popular">
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 mx-auto mb-3 bg-purple-100 rounded-full dark:bg-purple-900/20 flex items-center justify-center">
+                    <span class="text-purple-600 text-xl">👤</span>
+                </div>
+                <h3 class="text-xl md:text-2xl font-bold">注册用户套餐</h3>
+            </div>
+            <ul class="space-y-2 text-left mb-6">
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 个人链接管理面板</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 详细访问统计</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限自定义短码</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义中继页设计</li>
+            </ul>
+            <div class="border-t border-border pt-4 text-center">
+                <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
+            </div>
+        </div>
+        <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 mx-auto mb-3 bg-purple-100 rounded-full dark:bg-purple-900/20 flex items-center justify-center">
+                    <span class="text-purple-600 text-xl">⚙️</span>
+                </div>
+                <h3 class="text-xl md:text-2xl font-bold">自建用户套餐</h3>
+            </div>
+            <ul class="space-y-2 text-left mb-6">
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全数据控制权</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 一键自托管部署</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自由扩展功能</li>
+                <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 100% 开源免费</li>
+            </ul>
+            <div class="border-t border-border pt-4 text-center">
+                <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
+            </div>
+        </div>
+    </div>
+</section>
 
         <section class="text-center mb-8 md:mb-16">
             <h2 class="text-2xl md:text-3xl font-bold mb-8">用户评价</h2>
@@ -369,9 +369,9 @@ if (isset($_COOKIE['short_history'])) {
                     <p class="text-sm text-muted-foreground">"很不错的，光看UI不够，中继页设计和账号下管理链接功能都很出色。"</p>
                 </div>
                 <div class="bg-card rounded-lg border p-4 md:p-6">
-                    <img src="https://cdn.mengze.vip/gh/YShenZe/Blog-Static-Resource@main/images/1746460967151.jpg" alt="用户头像" class="w-12 h-12 rounded-full mx-auto mb-4">
-                    <h4 class="font-semibold mb-2">梦泽</h4>
-                    <p class="text-sm text-muted-foreground">"安全可靠，从不担心链接泄露。开源代码值得信赖。"</p>
+                    <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/575821d3f5cfc966.jpg" alt="用户头像" class="w-12 h-12 rounded-full mx-auto mb-4">
+                    <h4 class="font-semibold mb-2">一只西西</h4>
+                    <p class="text-sm text-muted-foreground">"少见的公益服务，作者是救世主"</p>
                 </div>
             </div>
         </section>

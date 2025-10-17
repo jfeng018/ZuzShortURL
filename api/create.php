@@ -1,6 +1,11 @@
 <?php
 require_once 'config.php';
 
+if (get_setting($pdo, 'private_mode') && !require_admin_auth()) {
+    header('Location: /admin');
+    exit;
+}
+
 if (!get_setting($pdo, 'allow_guest') && !is_logged_in()) {
     header('Location: /login');
     exit;
@@ -12,6 +17,7 @@ $success = '';
 $short_url = '';
 $code = '';
 $user_id = is_logged_in() ? get_current_user_id() : null;
+$is_logged_in = is_logged_in();
 
 if ($method === 'POST') {
     check_rate_limit($pdo);
@@ -20,7 +26,10 @@ if ($method === 'POST') {
     } else {
         $longurl = trim($_POST['url'] ?? '');
         $custom_code = trim($_POST['custom_code'] ?? '');
-        $enable_intermediate = isset($_POST['enable_intermediate']);
+        $enable_intermediate = isset($_POST['enable_intermediate']) && $is_logged_in;
+        $redirect_delay = $is_logged_in && is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+        $link_password = $is_logged_in ? trim($_POST['link_password'] ?? '') : '';
+        $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
         $expiration = $_POST['expiration'] ?? null;
         if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
             $error = '无效的URL。';
@@ -43,8 +52,8 @@ if ($method === 'POST') {
             }
             if (empty($error)) {
                 $enable_str = $enable_intermediate ? 'true' : 'false';
-                $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, expiration_date) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([$code, $longurl, $user_id, $enable_str, $expiration ?: null]);
+                $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
                 $short_url = $base_url . '/' . $code;
                 $success = '短链接创建成功！';
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
@@ -248,6 +257,51 @@ if ($method === 'POST') {
                 transform: translateY(0);
             }
         }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
@@ -295,12 +349,25 @@ if ($method === 'POST') {
                     <label class="block text-sm font-medium mb-2">自定义短码（可选）</label>
                     <input type="text" name="custom_code" class="w-full px-3 py-2 border border-input rounded-md" placeholder="自定义短码" maxlength="10">
                 </div>
+                <?php if ($is_logged_in): ?>
                 <div class="mb-4">
-                    <label class="flex items-center space-x-2">
-                        <input type="checkbox" name="enable_intermediate" class="rounded border-input">
-                        <span class="text-sm">启用转跳中继页</span>
-                    </label>
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium">启用转跳中继页</label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                 </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                    <input type="number" name="redirect_delay" class="w-full px-3 py-2 border border-input rounded-md" min="0" value="0">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">链接密码（可选）</label>
+                    <input type="password" name="link_password" class="w-full px-3 py-2 border border-input rounded-md" placeholder="设置密码以加密链接">
+                </div>
+                <?php endif; ?>
                 <div class="mb-6">
                     <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                     <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
