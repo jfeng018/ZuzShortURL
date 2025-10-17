@@ -249,7 +249,7 @@ if (isset($_COOKIE['short_history'])) {
                 </div>
             </div>
             <div class="md:w-1/2">
-                <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d9aeb70eb59385c8.jpg" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
+                <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
             </div>
         </section>
 
