@@ -168,6 +168,33 @@ if (isset($_COOKIE['short_history'])) {
         .pricing-card {
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -3px hsl(var(--ring)/0.2), 0 4px 6px -2px hsl(var(--ring)/0.1);
+        }
+
+        .pricing-card.popular {
+            border-color: hsl(var(--primary));
+            background: linear-gradient(135deg, hsl(var(--card)/0.9), hsl(var(--primary)/0.05));
+        }
+
+        .pricing-card.popular::before {
+            content: '推荐';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: hsl(var(--primary));
+            color: white;
+            padding: 4px 16px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            z-index: 1;
         }
 
         .hero-section {
@@ -272,37 +299,58 @@ if (isset($_COOKIE['short_history'])) {
             <h2 class="text-2xl md:text-3xl font-bold mb-8">选择您的计划</h2>
             <div class="grid md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
                 <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">免费版</h3>
+                    <div class="text-center mb-4">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-blue-100 rounded-full dark:bg-blue-900/20 flex items-center justify-center">
+                            <span class="text-blue-600 text-xl">🎯</span>
+                        </div>
+                        <h3 class="text-xl md:text-2xl font-bold">免费版</h3>
+                    </div>
                     <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限短链接</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本统计</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
-                        <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 速率限制</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限创建短链接</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 基本点击统计</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 支持自定义短码</li>
+                        <li class="flex items-center"><span class="text-yellow-500 mr-2">⚠</span> 轻度速率限制</li>
                     </ul>
-                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
-                    <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
+                    <div class="border-t border-border pt-4 text-center">
+                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                        <a href="/create" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">立即开始</a>
+                    </div>
+                </div>
+                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card popular">
+                    <div class="text-center mb-4">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-green-100 rounded-full dark:bg-green-900/20 flex items-center justify-center">
+                            <span class="text-green-600 text-xl">👤</span>
+                        </div>
+                        <h3 class="text-xl md:text-2xl font-bold">注册用户套餐</h3>
+                    </div>
+                    <ul class="space-y-2 text-left mb-6">
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 个人链接管理面板</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 详细访问统计</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限自定义短码</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义中继页设计</li>
+                    </ul>
+                    <div class="border-t border-border pt-4 text-center">
+                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                        <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
+                    </div>
                 </div>
                 <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">注册用户套餐</h3>
+                    <div class="text-center mb-4">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-purple-100 rounded-full dark:bg-purple-900/20 flex items-center justify-center">
+                            <span class="text-purple-600 text-xl">⚙️</span>
+                        </div>
+                        <h3 class="text-xl md:text-2xl font-bold">自建用户套餐</h3>
+                    </div>
                     <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 管理个人链接</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 高级统计数据</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义短码</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 中继页设置</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全数据控制权</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 一键自托管部署</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自由扩展功能</li>
+                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 100% 开源免费</li>
                     </ul>
-                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
-                    <a href="/register" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">注册使用</a>
-                </div>
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">自建用户套餐</h3>
-                    <ul class="space-y-2 text-left mb-6">
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全自由控制</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自托管部署</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义功能</li>
-                        <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 开源免费</li>
-                    </ul>
-                    <p class="text-2xl md:text-3xl font-bold text-green-600 mb-4">$0 / 月</p>
-                    <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
+                    <div class="border-t border-border pt-4 text-center">
+                        <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                        <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">Fork 项目</a>
+                    </div>
                 </div>
             </div>
         </section>
