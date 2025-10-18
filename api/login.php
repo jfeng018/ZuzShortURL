@@ -4,10 +4,10 @@ require_once 'includes/functions.php';
 
 $csrf_token = generate_csrf_token();
 $error = '';
-if ($method === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
-    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '')) {
+    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
         $error = 'CAPTCHA验证失败。';
     } else {
         $username = trim($_POST['username'] ?? '');
@@ -111,10 +111,12 @@ if ($method === 'POST') {
                     <label class="block text-sm font-medium mb-1">密码</label>
                     <input type="password" name="password" class="w-full px-2 py-1 border border-input rounded-md" required>
                 </div>
-                <div class="cf-turnstile mb-3" data-sitekey="0x4AAAAAAB7QXdHctr-rc-Yf"></div> <!-- 添加 mb-3 -->
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div> <!-- 添加 mb-3 -->
+                <?php endif; ?>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button> <!-- py-2 mt-4 -> py-1 mt-3 -->
             </form>
-            <?php if (get_setting($pdo, 'allow_register')): ?>
+            <?php if (get_setting($pdo, 'allow_register') === 'true'): ?>
                 <p class="mt-3 text-center text-sm">没有账号？<a href="/register" class="text-primary hover:underline">注册</a></p> <!-- mt-4 -> mt-3 -->
             <?php endif; ?>
         </div>

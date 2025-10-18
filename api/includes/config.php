@@ -52,17 +52,29 @@ class DatabaseSessionHandler implements SessionHandlerInterface {
     }
 }
 
-$db_url = parse_url(getenv('DATABASE_URL'));
+$db_url_str = getenv('DATABASE_URL') ?: '';
+if (empty($db_url_str)) {
+    http_response_code(500);
+    die('DATABASE_URL 环境变量未设置');
+}
+$db_url = parse_url($db_url_str);
+if (!$db_url || empty($db_url['host']) || empty($db_url['path'])) {
+    http_response_code(500);
+    die('DATABASE_URL 环境变量无效');
+}
 $host = $db_url['host'];
 $port = $db_url['port'] ?? 5432;
 $dbname = ltrim($db_url['path'], '/');
-$user = $db_url['user'];
-$pass = $db_url['pass'];
-$admin_token = getenv('ADMIN_TOKEN');
+$user = $db_url['user'] ?? '';
+$pass = $db_url['pass'] ?? '';
+$admin_token = getenv('ADMIN_TOKEN') ?: '';
 
 try {
     $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    $pdo->beginTransaction();  // 用事务包裹所有表操作
+    
     $pdo->exec("CREATE TABLE IF NOT EXISTS short_links (
         id SERIAL PRIMARY KEY,
         shortcode VARCHAR(10) UNIQUE NOT NULL,
@@ -98,21 +110,28 @@ try {
     )");
     $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
         \"key\" VARCHAR(50) PRIMARY KEY,
-        value BOOLEAN DEFAULT true
+        value TEXT DEFAULT 'true'
     )");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', false) ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', true) ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', false) ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("ALTER TABLE settings ALTER COLUMN value TYPE TEXT;");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', 'false') ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', 'true') ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', 'false') ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_enabled', 'false') ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_site_key', '') ON CONFLICT (\"key\") DO NOTHING");
+    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_secret_key', '') ON CONFLICT (\"key\") DO NOTHING");
     $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
     $pdo->exec("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);");
     
-    $handler = new DatabaseSessionHandler($pdo);
-    session_set_save_handler($handler, true);
-    session_start();
+    $pdo->commit();  // 提交事务
 } catch (PDOException $e) {
+    if (isset($pdo)) $pdo->rollBack();  // 回滚
     http_response_code(500);
     die('数据库连接失败: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
 }
+
+$handler = new DatabaseSessionHandler($pdo);
+session_set_save_handler($handler, true);
+session_start();
 
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');

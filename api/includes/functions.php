@@ -12,19 +12,32 @@ function validate_csrf_token($token) {
     return hash_equals($_SESSION['csrf_token'] ?? '', $token);
 }
 
-function validate_captcha($token) {
-    global $cf_secret_key; // 定义在底部
+function validate_captcha($token, $pdo) {  // 添加 $pdo 参数
+    $turnstile_enabled = get_setting($pdo, 'turnstile_enabled') === 'true';
+    if (!$turnstile_enabled) {
+        return true; // 如果未启用，则跳过验证
+    }
+    $cf_secret_key = get_setting($pdo, 'turnstile_secret_key');
+    if (empty($cf_secret_key)) {
+        return false; // 未配置密钥
+    }
     $url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
     $data = [
         'secret' => $cf_secret_key,
         'response' => $token,
-        'remoteip' => $_SERVER['REMOTE_ADDR']
+        'remoteip' => $_SERVER['REMOTE_ADDR'] ?? ''
     ];
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);  // 添加超时
     $response = curl_exec($ch);
+    if ($response === false) {  // 添加错误检查
+        error_log('CAPTCHA 验证 cURL 错误: ' . curl_error($ch));
+        curl_close($ch);
+        return false;
+    }
     curl_close($ch);
     $result = json_decode($response, true);
     return $result['success'] ?? false;
@@ -111,6 +124,10 @@ function require_admin_auth() {
 }
 
 function get_setting($pdo, $key) {
+    if (!$pdo) {
+        error_log('PDO connection is null in get_setting');
+        return ($key === 'allow_guest' ? false : true);
+    }
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE \"key\" = ?");
     $stmt->execute([$key]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -118,9 +135,8 @@ function get_setting($pdo, $key) {
 }
 
 function set_setting($pdo, $key, $value) {
-    $bool_str = $value ? 'true' : 'false';
     $stmt = $pdo->prepare("INSERT INTO settings (\"key\", value) VALUES (?, ?) ON CONFLICT (\"key\") DO UPDATE SET value = ?");
-    $stmt->execute([$key, $bool_str, $bool_str]);
+    $stmt->execute([$key, $value, $value]);
 }
 
 function logout() {
@@ -138,5 +154,4 @@ function logout() {
     $handler->destroy(session_id());
 }
 
-$cf_secret_key = '0x4AAAAAAB7QXaEc_7LsZeqHJWHfb7BsDVI';
 ?>

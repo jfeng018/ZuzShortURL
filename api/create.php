@@ -2,15 +2,17 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-if (get_setting($pdo, 'private_mode') && !require_admin_auth()) {
+if (get_setting($pdo, 'private_mode') === 'true' && !require_admin_auth()) {
     header('Location: /admin');
     exit;
 }
 
-if (!get_setting($pdo, 'allow_guest') && !is_logged_in()) {
+if (get_setting($pdo, 'allow_guest') === 'false' && !is_logged_in()) {
     header('Location: /login');
     exit;
 }
+
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];  // 添加定义
 
 $csrf_token = generate_csrf_token();
 $error = '';
@@ -20,11 +22,11 @@ $code = '';
 $user_id = is_logged_in() ? get_current_user_id() : null;
 $is_logged_in = is_logged_in();
 
-if ($method === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
     check_rate_limit($pdo);
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
-    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '')) {
+    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
         $error = 'CAPTCHA验证失败。';
     } else {
         $longurl = trim($_POST['url'] ?? '');
@@ -34,12 +36,18 @@ if ($method === 'POST') {
         $link_password = $is_logged_in ? trim($_POST['link_password'] ?? '') : '';
         $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
         $expiration = $_POST['expiration'] ?? null;
+        
+        // 添加过期日期验证
+        if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+            $error = '无效的过期日期格式。';
+        }
+        
         if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
             $error = '无效的URL。';
         } else {
             $code = '';
             if (!empty($custom_code)) {
-                $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+                $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);  // 使用定义的 $reserved_codes
                 if ($validate === true) {
                     $code = $custom_code;
                 } else {
@@ -48,7 +56,7 @@ if ($method === 'POST') {
             }
             if (empty($code)) {
                 try {
-                    $code = generate_random_code($pdo, $reserved_codes);
+                    $code = generate_random_code($pdo, $reserved_codes);  // 使用定义的 $reserved_codes
                 } catch (Exception $e) {
                     $error = '生成短码失败。';
                 }
@@ -62,7 +70,14 @@ if ($method === 'POST') {
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
                 $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_url, 'created_at' => time()];
                 $history = array_slice($history, -5);
-                setcookie('short_history', json_encode($history), time() + (30 * 24 * 3600), '/');
+                // 优化 Cookie：使用数组参数，提升安全
+                setcookie('short_history', json_encode($history), [
+                    'expires' => time() + (30 * 24 * 3600),
+                    'path' => '/',
+                    'httponly' => true,
+                    'secure' => true,  // 如果用 HTTPS
+                    'samesite' => 'Lax'
+                ]);
             }
         }
     }
@@ -167,7 +182,9 @@ if ($method === 'POST') {
                     <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                     <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
                 </div>
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAAB7QXdHctr-rc-Yf"></div>
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                <?php endif; ?>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 mt-4">创建短链接</button>
             </form>
             <?php if ($success): ?>

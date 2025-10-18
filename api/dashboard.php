@@ -2,7 +2,7 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-if (get_setting($pdo, 'private_mode') && !require_admin_auth()) {
+if (get_setting($pdo, 'private_mode') === 'true' && !require_admin_auth()) {
     header('Location: /admin');
     exit;
 }
@@ -13,6 +13,7 @@ if (!is_logged_in()) {
 }
 
 $user_id = get_current_user_id();
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];  // 添加定义
 $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
@@ -20,14 +21,14 @@ $links = [];
 $sort = $_GET['sort'] ?? 'time';
 $order = $sort === 'clicks' ? 'clicks DESC' : 'created_at DESC';
 
-if ($method === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
     check_rate_limit($pdo);
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
     } else {
         $action = $_POST['action'] ?? '';
         if ($action === 'add') {
-            if (!validate_captcha($_POST['cf-turnstile-response'] ?? '')) {
+            if (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
                 $error = 'CAPTCHA验证失败。';
             } else {
                 $longurl = trim($_POST['url'] ?? '');
@@ -37,12 +38,18 @@ if ($method === 'POST') {
                 $link_password = trim($_POST['link_password'] ?? '');
                 $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
                 $expiration = $_POST['expiration'] ?? null;
+                
+                // 添加过期日期验证
+                if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+                    $error = '无效的过期日期格式。';
+                }
+                
                 if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
                     $error = '无效的URL。';
                 } else {
                     $code = '';
                     if (!empty($custom_code)) {
-                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);  // 使用定义的 $reserved_codes
                         if ($validate === true) {
                             $code = $custom_code;
                         } else {
@@ -51,7 +58,7 @@ if ($method === 'POST') {
                     }
                     if (empty($code)) {
                         try {
-                            $code = generate_random_code($pdo, $reserved_codes);
+                            $code = generate_random_code($pdo, $reserved_codes);  // 使用定义的 $reserved_codes
                         } catch (Exception $e) {
                             $error = '生成短码失败。';
                         }
@@ -72,6 +79,12 @@ if ($method === 'POST') {
             $link_password = trim($_POST['link_password'] ?? '');
             $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
             $expiration = $_POST['expiration'] ?? null;
+            
+            // 添加过期日期验证
+            if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+                $error = '无效的过期日期格式。';
+            }
+            
             $stmt = $pdo->prepare("SELECT id FROM short_links WHERE shortcode = ? AND user_id = ?");
             $stmt->execute([$code, $user_id]);
             if (!$stmt->fetch()) {
@@ -80,8 +93,8 @@ if ($method === 'POST') {
                 $error = '无效的新URL。';
             } else {
                 $enable_str = $enable_intermediate ? 'true' : 'false';
-                $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ? WHERE shortcode = ?");
-                $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $code]);
+                $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ? WHERE shortcode = ? AND user_id = ?");  // 添加 user_id 到 WHERE 以确保权限
+                $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $code, $user_id]);
                 $success = '链接更新成功。';
             }
         } elseif ($action === 'delete') {
@@ -286,8 +299,8 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
     </main>
     <?php include 'includes/footer.php'; ?>
 
-    <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
+    <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="addModalContent">
             <h3 class="text-lg font-semibold mb-4">添加新短链接</h3>
             <form method="post" id="addForm">
                 <input type="hidden" name="action" value="add">
@@ -314,7 +327,9 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                         <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                         <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
                     </div>
-                    <div class="cf-turnstile" data-sitekey="0x4AAAAAAB7QXdHctr-rc-Yf"></div>
+                    <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                    <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                    <?php endif; ?>
                     <div class="flex gap-2">
                         <button type="button" onclick="closeAddModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md">取消</button>
                         <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md">添加</button>
@@ -324,8 +339,8 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
         </div>
     </div>
 
-    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="editModalContent">
             <h3 class="text-lg font-semibold mb-4">编辑短链接</h3>
             <form method="post" id="editForm">
                 <input type="hidden" name="action" value="edit">
@@ -375,11 +390,21 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             button.textContent = currentSort === 'time' ? '按时间排序' : '按流量排序';
         });
         function openAddModal() {
-            document.getElementById('addModal').classList.remove('hidden');
+            const modal = document.getElementById('addModal');
+            const content = document.getElementById('addModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
         }
 
         function closeAddModal() {
-            document.getElementById('addModal').classList.add('hidden');
+            const modal = document.getElementById('addModal');
+            const content = document.getElementById('addModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
             document.getElementById('addForm').reset();
         }
 
@@ -390,11 +415,21 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             document.getElementById('editDelay').value = delay;
             document.getElementById('editPassword').value = password;
             document.getElementById('editExpiration').value = expiration ? expiration.split(' ')[0] : '';
-            document.getElementById('editModal').classList.remove('hidden');
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('editModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
         }
 
         function closeEditModal() {
-            document.getElementById('editModal').classList.add('hidden');
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('editModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
             document.getElementById('editForm').reset();
         }
 

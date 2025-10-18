@@ -1,12 +1,29 @@
 <?php
+$request_uri = $_SERVER['REQUEST_URI'];
+$path = parse_url($request_uri, PHP_URL_PATH);
+
+$clean_path = ltrim($path, '/');
+$file_path = __DIR__ . DIRECTORY_SEPARATOR . $clean_path;
+
+if (strpos($path, '.') !== false && file_exists($file_path) && is_file($file_path)) {
+    $ext = pathinfo($clean_path, PATHINFO_EXTENSION);
+    $mime = match($ext) {
+        'css' => 'text/css',
+        'js' => 'application/javascript',
+        'png', 'jpg', 'jpeg', 'gif' => 'image/' . $ext,
+        default => 'application/octet-stream'
+    };
+    header('Content-Type: ' . $mime);
+    readfile($file_path);
+    exit;
+}
+
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-$request_uri = $_SERVER['REQUEST_URI'];
-$path = parse_url($request_uri, PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-$private_mode = get_setting($pdo, 'private_mode');
+$private_mode = get_setting($pdo, 'private_mode') === 'true';
 $require_admin = $private_mode && !require_admin_auth();
 
 if ($require_admin && ($path === '/' || $path === '/create' || $path === '/login' || $path === '/register' || $path === '/dashboard')) {
@@ -27,7 +44,7 @@ if ($path === '/' || $path === '') {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Zuz.Asia - 即时缩短链接</title>
-        <link rel="stylesheet" href="includes/styles.css">
+        <link rel="stylesheet" href="./includes/styles.css">
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -224,7 +241,7 @@ if ($path === '/' || $path === '') {
                 <a href="/api/docs" class="inline-flex items-center px-8 py-4 bg-secondary text-secondary-foreground rounded-lg transition-colors font-semibold text-lg ml-4">API文档</a>
             </section>
         </div>
-        <?php include './includes/footer.php'; ?>
+        <?php include 'includes/footer.php'; ?>
     </body>
     </html>
     <?php
@@ -250,7 +267,40 @@ if ($path === '/' || $path === '') {
     header('Content-Type: application/json');
     check_rate_limit($pdo);
     $input = json_decode(file_get_contents('php://input'), true);
-    // ... (其余 API 代码相同，省略以节省空间)
+    $longurl = trim($input['url'] ?? '');
+    $custom_code = trim($input['custom_code'] ?? '');
+    $enable_intermediate = $input['enable_intermediate'] ?? false;
+    $redirect_delay = is_numeric($input['redirect_delay']) ? (int)$input['redirect_delay'] : 0;
+    $expiration = $input['expiration'] ?? null;
+    $response = ['success' => false];
+    if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
+        $response['error'] = '无效的URL';
+        echo json_encode($response);
+        exit;
+    }
+    $code = '';
+    if (!empty($custom_code)) {
+        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+        if ($validate !== true) {
+            $response['error'] = $validate;
+            echo json_encode($response);
+            exit;
+        }
+        $code = $custom_code;
+    }
+    if (empty($code)) {
+        try {
+            $code = generate_random_code($pdo, $reserved_codes);
+        } catch (Exception $e) {
+            $response['error'] = '生成短码失败';
+            echo json_encode($response);
+            exit;
+        }
+    }
+    $enable_str = $enable_intermediate ? 'true' : 'false';
+    $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, enable_intermediate_page, redirect_delay, expiration_date) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$code, $longurl, $enable_str, $redirect_delay, $expiration ?: null]);
+    $short_url = $base_url . '/' . $code;
     $response['success'] = true;
     $response['short_url'] = $short_url;
     echo json_encode($response);

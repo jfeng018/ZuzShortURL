@@ -1,6 +1,6 @@
 <?php
-require_once './includes/config.php';
-require_once './includes/functions.php';
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -100,6 +100,6 @@ require_once './includes/functions.php';
             </a>
         </div>
     </main>
-    <?php include './includes/footer.php'; ?>
+    <?php include 'includes/footer.php'; ?>
 </body>
 </html>

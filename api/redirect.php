@@ -147,7 +147,7 @@ if (!empty($link['link_password'])) {
                                 lg: "var(--radius)",
                                 md: "calc(var(--radius) - 2px)",
                                 sm: "calc(var(--radius) - 4px)",
-                            },
+                                },
                         },
                     }
                 }
@@ -237,12 +237,12 @@ if ($link['enable_intermediate_page']) {
                             lg: "var(--radius)",
                             md: "calc(var(--radius) - 2px)",
                             sm: "calc(var(--radius) - 4px)",
+                            },
                         },
-                    },
+                    }
                 }
-            }
-        </script>
-        <link rel="stylesheet" href="includes/styles.css">
+            </script>
+            <link rel="stylesheet" href="includes/styles.css">
     </head>
     <body class="bg-background text-foreground min-h-screen flex flex-col">
         <?php include 'includes/header.php'; ?>

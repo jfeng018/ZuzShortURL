@@ -100,12 +100,18 @@ if ($method === 'POST') {
                 break;
             case 'settings':
                 if (!require_admin_auth()) break;
-                $private_mode = isset($_POST['private_mode']);
-                $allow_guest = isset($_POST['allow_guest']);
-                $allow_register = isset($_POST['allow_register']);
+                $private_mode = isset($_POST['private_mode']) ? 'true' : 'false';
+                $allow_guest = isset($_POST['allow_guest']) ? 'true' : 'false';
+                $allow_register = isset($_POST['allow_register']) ? 'true' : 'false';
+                $turnstile_enabled = isset($_POST['turnstile_enabled']) ? 'true' : 'false';
+                $turnstile_site_key = trim($_POST['turnstile_site_key'] ?? '');
+                $turnstile_secret_key = trim($_POST['turnstile_secret_key'] ?? '');
                 set_setting($pdo, 'private_mode', $private_mode);
                 set_setting($pdo, 'allow_guest', $allow_guest);
                 set_setting($pdo, 'allow_register', $allow_register);
+                set_setting($pdo, 'turnstile_enabled', $turnstile_enabled);
+                set_setting($pdo, 'turnstile_site_key', $turnstile_site_key);
+                set_setting($pdo, 'turnstile_secret_key', $turnstile_secret_key);
                 $success = '设置更新成功。';
                 break;
             case 'logout':
@@ -225,10 +231,10 @@ if ($show_list) {
     </nav>
     <main class="container mx-auto p-4 pt-20">
         <?php if ($error): ?>
-            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
+            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4 backdrop-filter backdrop-blur-sm transition-all duration-300"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
         <?php if ($success): ?>
-            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($success); ?></div>
+            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4 backdrop-filter backdrop-blur-sm transition-all duration-300"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
         <?php if (!$show_list): ?>
             <div class="max-w-md mx-auto">
@@ -428,16 +434,38 @@ if ($show_list) {
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">允许未注册用户使用（默认允许）</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="allow_guest" <?php echo get_setting($pdo, 'allow_guest') ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="allow_guest" <?php echo get_setting($pdo, 'allow_guest') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">允许用户注册（默认允许）</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="allow_register" <?php echo get_setting($pdo, 'allow_register') ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="allow_register" <?php echo get_setting($pdo, 'allow_register') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">私有模式（仅管理员）</span>
+                                <label class="switch">
+                                    <input type="checkbox" name="private_mode" <?php echo get_setting($pdo, 'private_mode') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">启用Cloudflare Turnstile</span>
+                                <label class="switch">
+                                    <input type="checkbox" name="turnstile_enabled" <?php echo get_setting($pdo, 'turnstile_enabled') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Turnstile Site Key</label>
+                                <input type="text" name="turnstile_site_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Turnstile Secret Key</label>
+                                <input type="text" name="turnstile_secret_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_secret_key')); ?>">
                             </div>
                             <button type="submit" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
                         </div>
@@ -447,8 +475,8 @@ if ($show_list) {
         <?php endif; ?>
     </main>
 
-    <div id="addLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
+    <div id="addLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="addLinkModalContent">
             <h3 class="text-lg font-semibold mb-4">添加新链接</h3>
             <form method="post">
                 <input type="hidden" name="action" value="add">
@@ -485,8 +513,8 @@ if ($show_list) {
         </div>
     </div>
 
-    <div id="editLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
+    <div id="editLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="editLinkModalContent">
             <h3 class="text-lg font-semibold mb-4">编辑链接</h3>
             <form method="post">
                 <input type="hidden" name="action" value="edit">
@@ -529,11 +557,21 @@ if ($show_list) {
         }
 
         function openAddLinkModal() {
-            document.getElementById('addLinkModal').classList.remove('hidden');
+            const modal = document.getElementById('addLinkModal');
+            const content = document.getElementById('addLinkModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
         }
 
         function closeAddLinkModal() {
-            document.getElementById('addLinkModal').classList.add('hidden');
+            const modal = document.getElementById('addLinkModal');
+            const content = document.getElementById('addLinkModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
         }
 
         function openEditLinkModal(code, url, enableIntermediate, delay, password, expiration, userId) {
@@ -544,11 +582,21 @@ if ($show_list) {
             document.getElementById('editLinkPassword').value = password;
             document.getElementById('editLinkExpiration').value = expiration ? expiration.split(' ')[0] : '';
             document.getElementById('editLinkUserId').value = userId;
-            document.getElementById('editLinkModal').classList.remove('hidden');
+            const modal = document.getElementById('editLinkModal');
+            const content = document.getElementById('editLinkModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
         }
 
         function closeEditLinkModal() {
-            document.getElementById('editLinkModal').classList.add('hidden');
+            const modal = document.getElementById('editLinkModal');
+            const content = document.getElementById('editLinkModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
         }
 
         function copyToClipboard(id) {
