@@ -1,0 +1,37 @@
+<?php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
+?>
+<nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
+    <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Zuz.Asia</h1>
+        <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+        <div class="hidden md:flex space-x-4 desktop-menu">
+            <?php if (is_logged_in()): ?>
+                <span class="text-muted-foreground">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                <a href="/dashboard" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">控制台</a>
+                <a href="/logout" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">登出</a>
+            <?php else: ?>
+                <a href="/login" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">登录</a>
+                <a href="/register" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">注册</a>
+            <?php endif; ?>
+            <a href="/api/docs" class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80">API文档</a>
+        </div>
+        <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+            <?php if (is_logged_in()): ?>
+                <span class="text-muted-foreground block">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                <a href="/dashboard" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">控制台</a>
+                <a href="/logout" class="block px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</a>
+            <?php else: ?>
+                <a href="/login" class="block px-4 py-2 bg-primary text-primary-foreground rounded-md">登录</a>
+                <a href="/register" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">注册</a>
+            <?php endif; ?>
+            <a href="/api/docs" class="block px-4 py-2 bg-secondary text-secondary-foreground rounded-md">API文档</a>
+        </div>
+    </div>
+</nav>
+<script>
+    function toggleMobileMenu() {
+        document.getElementById('mobileMenu').classList.toggle('hidden');
+    }
+</script>

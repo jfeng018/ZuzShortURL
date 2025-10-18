@@ -1,5 +1,6 @@
 <?php
-require_once 'config.php';
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
 
 $csrf_token = generate_csrf_token();
 $error = '';
@@ -112,6 +113,12 @@ if ($method === 'POST') {
                 $show_list = false;
                 $success = '已登出。';
                 break;
+            case 'delete_expired':
+                if (!require_admin_auth()) break;
+                $stmt = $pdo->prepare("DELETE FROM short_links WHERE expiration_date < NOW()");
+                $stmt->execute();
+                $success = '已过期链接删除成功。';
+                break;
         }
     }
 }
@@ -137,238 +144,55 @@ if ($show_list) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理面板 - Zuz.Asia</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        border: "hsl(var(--border))",
-                        input: "hsl(var(--input))",
-                        ring: "hsl(var(--ring))",
-                        background: "hsl(var(--background))",
-                        foreground: "hsl(var(--foreground))",
-                        primary: {
-                            DEFAULT: "hsl(var(--primary))",
-                            foreground: "hsl(var(--primary-foreground))",
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            border: "hsl(var(--border))",
+                            input: "hsl(var(--input))",
+                            ring: "hsl(var(--ring))",
+                            background: "hsl(var(--background))",
+                            foreground: "hsl(var(--foreground))",
+                            primary: {
+                                DEFAULT: "hsl(var(--primary))",
+                                foreground: "hsl(var(--primary-foreground))",
+                            },
+                            secondary: {
+                                DEFAULT: "hsl(var(--secondary))",
+                                foreground: "hsl(var(--secondary-foreground))",
+                            },
+                            destructive: {
+                                DEFAULT: "hsl(var(--destructive))",
+                                foreground: "hsl(var(--destructive-foreground))",
+                            },
+                            muted: {
+                                DEFAULT: "hsl(var(--muted))",
+                                foreground: "hsl(var(--muted-foreground))",
+                            },
+                            accent: {
+                                DEFAULT: "hsl(var(--accent))",
+                                foreground: "hsl(var(--accent-foreground))",
+                            },
+                            popover: {
+                                DEFAULT: "hsl(var(--popover))",
+                                foreground: "hsl(var(--popover-foreground))",
+                            },
+                            card: {
+                                DEFAULT: "hsl(var(--card))",
+                                foreground: "hsl(var(--card-foreground))",
+                            },
                         },
-                        secondary: {
-                            DEFAULT: "hsl(var(--secondary))",
-                            foreground: "hsl(var(--secondary-foreground))",
-                        },
-                        destructive: {
-                            DEFAULT: "hsl(var(--destructive))",
-                            foreground: "hsl(var(--destructive-foreground))",
-                        },
-                        muted: {
-                            DEFAULT: "hsl(var(--muted))",
-                            foreground: "hsl(var(--muted-foreground))",
-                        },
-                        accent: {
-                            DEFAULT: "hsl(var(--accent))",
-                            foreground: "hsl(var(--accent-foreground))",
-                        },
-                        popover: {
-                            DEFAULT: "hsl(var(--popover))",
-                            foreground: "hsl(var(--popover-foreground))",
-                        },
-                        card: {
-                            DEFAULT: "hsl(var(--card))",
-                            foreground: "hsl(var(--card-foreground))",
+                        borderRadius: {
+                            lg: "var(--radius)",
+                            md: "calc(var(--radius) - 2px)",
+                            sm: "calc(var(--radius) - 4px)",
                         },
                     },
-                    borderRadius: {
-                        lg: "var(--radius)",
-                        md: "calc(var(--radius) - 2px)",
-                        sm: "calc(var(--radius) - 4px)",
-                    },
-                },
+                }
             }
-        }
-    </script>
-    <style>
-        :root {
-            --background: 0 0% 100%;
-            --foreground: 222.2 84% 4.9%;
-            --card: 0 0% 100%;
-            --card-foreground: 222.2 84% 4.9%;
-            --popover: 0 0% 100%;
-            --popover-foreground: 222.2 84% 4.9%;
-            --primary: 222.2 47.4% 11.2%;
-            --primary-foreground: 210 40% 98%;
-            --secondary: 210 40% 96%;
-            --secondary-foreground: 222.2 47.4% 11.2%;
-            --muted: 210 40% 96%;
-            --muted-foreground: 215.4 16.3% 46.9%;
-            --accent: 210 40% 96%;
-            --accent-foreground: 222.2 47.4% 11.2%;
-            --destructive: 0 84.2% 60.2%;
-            --destructive-foreground: 210 40% 98%;
-            --border: 214.3 31.8% 91.4%;
-            --input: 214.3 31.8% 91.4%;
-            --ring: 222.2 84% 4.9%;
-            --radius: 0.5rem;
-        }
-
-        .dark {
-            --background: 222.2 84% 4.9%;
-            --foreground: 210 40% 98%;
-            --card: 222.2 84% 4.9%;
-            --card-foreground: 210 40% 98%;
-            --popover: 222.2 84% 4.9%;
-            --popover-foreground: 210 40% 98%;
-            --primary: 210 40% 98%;
-            --primary-foreground: 222.2 47.4% 11.2%;
-            --secondary: 217.2 32.6% 17.5%;
-            --secondary-foreground: 210 40% 98%;
-            --muted: 217.2 32.6% 17.5%;
-            --muted-foreground: 215 20.2% 65.1%;
-            --accent: 217.2 32.6% 17.5%;
-            --accent-foreground: 210 40% 98%;
-            --destructive: 0 62.8% 30.6%;
-            --destructive-foreground: 210 40% 98%;
-            --border: 217.2 32.6% 17.5%;
-            --input: 217.2 32.6% 17.5%;
-            --ring: 212.7 26.8% 83.9%;
-        }
-
-        body {
-            font-size: 0.875rem;
-        }
-
-        body {
-            background-color: hsl(var(--background));
-            background-image: 
-                repeating-linear-gradient(90deg, transparent, transparent 19px, hsl(var(--muted-foreground)/0.1) 20px, hsl(var(--muted-foreground)/0.1) 21px),
-                repeating-linear-gradient(0deg, transparent, transparent 19px, hsl(var(--muted-foreground)/0.1) 20px, hsl(var(--muted-foreground)/0.1) 21px);
-            background-size: 20px 20px;
-            position: relative;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: inherit;
-            z-index: -1;
-            backdrop-filter: blur(1px);
-            pointer-events: none;
-        }
-
-        .bg-card {
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            background: hsl(var(--card)/0.8);
-            border: 1px solid hsl(var(--border)/0.5);
-        }
-
-        .dark .bg-card {
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            background: hsl(var(--card)/0.6);
-            border: 1px solid hsl(var(--border)/0.5);
-        }
-
-        .container {
-            position: relative;
-            z-index: 1;
-        }
-
-        .bg-card {
-            box-shadow: 0 4px 6px -1px hsl(var(--ring)/0.1), 0 2px 4px -1px hsl(var(--ring)/0.06);
-        }
-
-        .dark .bg-card {
-            box-shadow: 0 4px 6px -1px hsl(var(--ring)/0.2), 0 2px 4px -1px hsl(var(--ring)/0.1);
-        }
-
-        .pricing-card {
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-        }
-
-        .hero-section {
-            backdrop-filter: blur(2px);
-            -webkit-backdrop-filter: blur(2px);
-        }
-
-        .mobile-menu {
-            display: none;
-            z-index: 50;
-        }
-
-        @media (max-width: 768px) {
-            .desktop-menu {
-                display: none;
-            }
-            .mobile-menu {
-                display: block;
-            }
-        }
-
-        .mobile-menu {
-            animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 40px;
-            height: 20px;
-        }
-
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 20px;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-
-        input:checked + .slider {
-            background-color: #2196F3;
-        }
-
-        input:checked + .slider:before {
-            transform: translateX(20px);
-        }
-    </style>
+        </script>
+    <link rel="stylesheet" href="includes/styles.css">
 </head>
 <body class="bg-background text-foreground min-h-screen">
     <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
@@ -454,7 +278,14 @@ if ($show_list) {
             <?php elseif ($active_tab === 'links'): ?>
                 <section>
                     <h2 class="text-2xl font-bold mb-4">链接管理</h2>
-                    <button onclick="openAddLinkModal()" class="mb-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">+ 添加链接</button>
+                    <div class="flex space-x-4 mb-4">
+                        <button onclick="openAddLinkModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">+ 添加链接</button>
+                        <form method="post" class="inline">
+                            <input type="hidden" name="action" value="delete_expired">
+                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                            <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
+                        </form>
+                    </div>
                     <div class="md:hidden space-y-4">
                         <?php foreach ($links as $link): ?>
                             <div class="bg-card rounded-lg border p-4">
@@ -473,12 +304,12 @@ if ($show_list) {
                                     <p>密码保护: <?php echo $link['link_password'] ? '是' : '否'; ?></p>
                                 </div>
                                 <div class="flex space-x-2 mt-4">
-                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-1 bg-primary text-primary-foreground rounded text-xs">编辑</button>
+                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded text-sm">编辑</button>
                                     <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
                                         <input type="hidden" name="action" value="delete_link">
                                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                                         <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
-                                        <button type="submit" class="w-full px-3 py-1 bg-destructive text-destructive-foreground rounded text-xs">删除</button>
+                                        <button type="submit" class="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm">删除</button>
                                     </form>
                                 </div>
                             </div>
@@ -594,7 +425,6 @@ if ($show_list) {
                         <input type="hidden" name="action" value="settings">
                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                         <div class="bg-card rounded-lg border p-6 space-y-4">
-                            
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">允许未注册用户使用（默认允许）</span>
                                 <label class="switch">
@@ -737,6 +567,3 @@ if ($show_list) {
     </script>
 </body>
 </html>
-<?php
-exit;
-?>
