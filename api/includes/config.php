@@ -72,59 +72,7 @@ $admin_token = getenv('ADMIN_TOKEN') ?: '';
 try {
     $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    $pdo->beginTransaction();  // 用事务包裹所有表操作
-    
-    $pdo->exec("CREATE TABLE IF NOT EXISTS short_links (
-        id SERIAL PRIMARY KEY,
-        shortcode VARCHAR(10) UNIQUE NOT NULL,
-        longurl TEXT NOT NULL,
-        user_id INT DEFAULT NULL,
-        enable_intermediate_page BOOLEAN DEFAULT FALSE,
-        redirect_delay INT DEFAULT 0,
-        link_password TEXT DEFAULT NULL,
-        expiration_date TIMESTAMP DEFAULT NULL,
-        clicks INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS expiration_date TIMESTAMP DEFAULT NULL;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS redirect_delay INT DEFAULT 0;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS link_password TEXT DEFAULT NULL;");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
-        ip INET PRIMARY KEY,
-        request_count INT DEFAULT 0,
-        window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
-        sess_id VARCHAR(128) PRIMARY KEY,
-        sess_data TEXT NOT NULL,
-        sess_lifetime INT NOT NULL,
-        sess_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
-        \"key\" VARCHAR(50) PRIMARY KEY,
-        value TEXT DEFAULT 'true'
-    )");
-    $pdo->exec("ALTER TABLE settings ALTER COLUMN value TYPE TEXT;");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', 'true') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_enabled', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_site_key', '') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_secret_key', '') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
-    $pdo->exec("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);");
-    
-    $pdo->commit();  // 提交事务
 } catch (PDOException $e) {
-    if (isset($pdo)) $pdo->rollBack();  // 回滚
     http_response_code(500);
     die('数据库连接失败: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
 }
@@ -138,7 +86,7 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
-$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard', 'migrate'];
 
 $domain = $_SERVER['HTTP_HOST'];
 $protocol = 'https';

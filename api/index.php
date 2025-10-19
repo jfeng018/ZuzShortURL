@@ -254,6 +254,8 @@ if ($path === '/' || $path === '') {
     require 'login.php';
 } elseif ($path === '/register') {
     require 'register.php';
+} elseif ($path === '/migrate') {
+    require 'migrate.php';
 } elseif ($path === '/dashboard') {
     require 'dashboard.php';
 } elseif ($path === '/logout') {
