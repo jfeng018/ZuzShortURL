@@ -76,6 +76,13 @@ body::before {
     transition: box-shadow 0.3s ease, transform 0.2s ease;
 }
 
+.header-card {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.8);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
 .dark .bg-card {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -169,7 +176,9 @@ input:checked + .slider:before {
 }
 
 .pricing-card.popular {
-    border-color: hsl(var(--primary));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.8);
     background: linear-gradient(135deg, hsl(var(--card)/0.9), hsl(var(--primary)/0.05));
 }
 
@@ -188,20 +197,17 @@ input:checked + .slider:before {
     z-index: 1;
 }
 
-/* 统一按钮样式，接近shadcn */
-button, a[href] {
+button {
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
     border-radius: var(--radius);
-    padding: 0.5rem 1rem; /* 统一padding */
     font-size: 0.875rem;
 }
 
-button:hover, a[href]:hover {
+button:hover:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px hsl(var(--ring)/0.1);
 }
 
-/* 输入框焦点效果，接近shadcn */
 input:focus, textarea:focus {
     outline: none;
     ring: 2px solid hsl(var(--primary));
@@ -209,7 +215,6 @@ input:focus, textarea:focus {
     transition: box-shadow 0.2s ease;
 }
 
-/* Turnstile UI适配 */
 .cf-turnstile {
     margin: 0 auto;
     display: flex;

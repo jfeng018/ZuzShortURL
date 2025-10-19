@@ -105,13 +105,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
 </head>
 <body class="bg-background text-foreground min-h-screen flex flex-col">
     <?php include 'includes/header.php'; ?>
-    <div class="flex-grow flex items-center justify-center pt-16">
+    <div class="flex-grow flex items-center justify-center pt-24">
         <div class="max-w-md w-full p-4 bg-card rounded-lg border">
             <h2 class="text-2xl font-bold mb-4 text-center inline-flex items-center justify-center">
                 <svg class="h-6 w-6 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9V7a2 2 0 00-2-2H8a2 2 0 00-2 2v2m6 4v4m-6-4h12m-6 4v4m0-4h.01" />
                 </svg>
-                注册
+                立即注册，享受大额优惠~
             </h2>
             <?php if ($error): ?>
                 <div class="bg-destructive/10 border border-destructive/30 text-destructive px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($error); ?></div>
@@ -123,22 +123,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                 <div class="mb-3">
                     <label class="block text-sm font-medium mb-1">用户名</label>
-                    <input type="text" name="username" class="w-full px-2 py-1 border border-input rounded-md" required>
+                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
                 <div class="mb-3">
                     <label class="block text-sm font-medium mb-1">密码</label>
-                    <input type="password" name="password" class="w-full px-2 py-1 border border-input rounded-md" required>
+                    <input type="password" name="password" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">确认密码</label>
-                    <input type="password" name="confirm_password" class="w-full px-2 py-1 border border-input rounded-md" required>
+                    <input type="password" name="confirm_password" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
                 <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
                 <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
                 <?php endif; ?>
-                <button type="submit" class="w-full bg-primary text-primary-foreground py-1 rounded-md hover:bg-primary/90 mt-3 text-sm">注册</button>
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">注册</button>
             </form>
-            <p class="mt-3 text-center text-sm">已有账号？<a href="/login" class="text-primary hover:underline">登录</a></p>
+            <p class="mt-3 text-center text-sm">已有账号？<a href="/login">登录</a></p>
         </div>
     </div>
     <?php include 'includes/footer.php'; ?>

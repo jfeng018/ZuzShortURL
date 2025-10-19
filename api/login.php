@@ -105,19 +105,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                 <div class="mb-3"> <!-- mb-4 -> mb-3 -->
                     <label class="block text-sm font-medium mb-1">用户名</label> <!-- mb-2 -> mb-1 -->
-                    <input type="text" name="username" class="w-full px-2 py-1 border border-input rounded-md" required> <!-- px-3 py-2 -> px-2 py-1 -->
+                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required> <!-- px-3 py-2 -> px-2 py-1 -->
                 </div>
                 <div class="mb-4"> <!-- mb-6 -> mb-4 -->
                     <label class="block text-sm font-medium mb-1">密码</label>
-                    <input type="password" name="password" class="w-full px-2 py-1 border border-input rounded-md" required>
+                    <input type="password" name="password" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
                 <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
                 <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div> <!-- 添加 mb-3 -->
                 <?php endif; ?>
-                <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button> <!-- py-2 mt-4 -> py-1 mt-3 -->
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button> <!-- py-2 mt-4 -> py-1 mt-3 -->
             </form>
             <?php if (get_setting($pdo, 'allow_register') === 'true'): ?>
-                <p class="mt-3 text-center text-sm">没有账号？<a href="/register" class="text-primary hover:underline">注册</a></p> <!-- mt-4 -> mt-3 -->
+                <p class="mt-3 text-center text-sm">没有账号？<a href="/register">注册</a></p> <!-- mt-4 -> mt-3 -->
             <?php endif; ?>
         </div>
     </div>

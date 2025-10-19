@@ -2,13 +2,13 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 ?>
-<nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
+<nav class="header-card border-b border-border px-4 py-2 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
     <div class="container mx-auto flex justify-between items-center">
         <h1 class="text-2xl font-bold">Zuz.Asia</h1>
         <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
         <div class="hidden md:flex space-x-4 desktop-menu">
             <?php if (is_logged_in()): ?>
-                <span class="text-muted-foreground">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                <span  class="text-muted-foreground py-2">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
                 <a href="/dashboard" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">控制台</a>
                 <a href="/logout" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">登出</a>
             <?php else: ?>

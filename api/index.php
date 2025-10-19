@@ -1,4 +1,11 @@
 <?php
+$requestUri = $_SERVER['REQUEST_URI'] ?? '';
+$path = parse_url($requestUri, PHP_URL_PATH);
+if ($path === '/migrate') {
+    require __DIR__ . '/migrate.php';
+    exit;
+}
+
 $request_uri = $_SERVER['REQUEST_URI'];
 $path = parse_url($request_uri, PHP_URL_PATH);
 
@@ -118,18 +125,51 @@ if ($path === '/' || $path === '') {
                 </div>
             </section>
 
-            <section class="grid md:grid-cols-3 gap-4 md:gap-8 mb-8 md:mb-16">
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">即时缩短</h3>
-                    <p class="text-muted-foreground">输入长连接，一键生成短链接，无需等待、立即分享、极速加载</p>
-                </div>
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">无限使用</h3>
-                    <p class="text-muted-foreground">免费计划支持无限量地创建短链接，也可以Fork仓库源码自己搭建本系统。</p>
-                </div>
-                <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
-                    <h3 class="text-xl md:text-2xl font-bold mb-4">安全可靠</h3>
-                    <p class="text-muted-foreground">基于PostgreSQL数据库加密存储，性能极致优化，安全可靠。</p>
+            <!-- 新增图文混排板块 -->
+            <section class="mb-8 md:mb-16 bg-card rounded-xl overflow-hidden">
+                <div class="grid md:grid-cols-2 gap-0">
+                    <div class="p-8 md:p-12 flex flex-col justify-center">
+                        <h2 class="text-3xl md:text-4xl font-bold mb-6">为什么选择 Zuz.Asia？</h2>
+                        <div class="space-y-6">
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">极速响应</h3>
+                                    <p class="text-muted-foreground">全球 CDN 加速，平均响应时间仅需 1.3 秒，让您的链接跳转快如闪电</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">安全可靠</h3>
+                                    <p class="text-muted-foreground">企业级安全防护，99.9% 正常运行时间保障，让您的链接永不下线</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">完全免费</h3>
+                                    <p class="text-muted-foreground">无隐藏费用，无功能限制，真正永久免费的短链接服务</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-64 md:h-auto">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/b6ff251d07560b6a.jpeg" alt="技术优势" class="absolute inset-0 w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent md:hidden"></div>
+                    </div>
                 </div>
             </section>
 
@@ -192,6 +232,42 @@ if ($path === '/' || $path === '') {
                             <button onclick="window.location.href='https://github.com/JanePHPDev/ZuzShortURL'" class="w-full bg-primary text-primary-foreground py-3 px-6 rounded-md hover:bg-primary/90 transition-colors font-semibold">
   Fork本项目
 </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+                        <!-- CEO发言板块 -->
+            <section class="mb-8 md:mb-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-8 md:p-12 text-white relative overflow-hidden">
+                <div class="absolute inset-0 opacity-10">
+                    <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <path d="M0,0 L100,100 L100,0 Z" fill="white"></path>
+                        <path d="M0,100 L100,0 L0,0 Z" fill="white"></path>
+                    </svg>
+                </div>
+                <div class="relative z-10">
+                    <div class="flex items-center mb-6">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/98625d409de6929e.jpg" alt="Vercel CEO" class="w-16 h-16 rounded-full mr-4 border-2 border-white/30">
+                        <div>
+                            <h3 class="text-xl font-bold">JanePHPDev</h3>
+                            <p class="text-purple-100">Zuz.Asia CEO ＆ 开发者</p>
+                        </div>
+                    </div>
+                    <blockquote class="text-xl md:text-2xl font-light mb-6 italic">
+                        "Zuz.Asia 展现了现代 Web 开发的精髓——简洁、高效、用户至上。这个项目完美诠释了如何用最新的技术栈打造出真正解决用户痛点的工具。"
+                    </blockquote>
+                    <div class="flex items-center space-x-6 text-sm">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                            </svg>
+                            推荐使用
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            技术领先
                         </div>
                     </div>
                 </div>
