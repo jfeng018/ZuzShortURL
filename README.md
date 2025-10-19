@@ -1,6 +1,5 @@
 # ZuzShortURL
-这是一个基于 PHP 开发、使用 PostgreSQL 数据库的短链接系统，前端采用 TailwindCSS，并针对 Vercel 做了专门的部署优化。  
-如果你不想自己维护数据库，可直接使用 Supabase 提供的免费 PostgreSQL 方案，**5 分钟上线**。
+基于PHP + PostgreSQL构建的、为创业团队、电商平台及中小型企业量身打造的下一代短链接SaaS解决方案。
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" />
 
 *Release仅用于版本发布，使用时请Frok本仓库或点击一键部署。  
