@@ -3,11 +3,12 @@
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" />
 
 *Release仅用于版本发布，使用时请Frok本仓库或点击一键部署。  
-*很抱歉，由于PHP和Vercel的一些冲突，导致二维码和图形验证码一直没上线，以及目录结构混乱，正在寻找解决方法
+*由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。
 
 ## 环境变量格式
 
 项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。
+如果需要部署到个人VPS上，必须手动导入.env我看内容到环境变量。
 ```env
 DATABASE_URL="你的PostgreSQL连接符"
 ADMIN_TOKEN="你的Token"
@@ -21,10 +22,11 @@ php -S localhost:8000 -t . api/index.php
 ```
 
 在使用Nginx、阿帕奇、IIS等服务器软件时可将运行目录设置为`api/`，然后编写伪静态。
+代码中已内置阿帕奇的伪静态方案。
 
 ## 数据库迁移
 
-在首次部署或数据库重置后，您需要手动运行数据库迁移来初始化表结构。请按照以下步骤操作：
+在首次部署或数据库重置后，您需要手动运行数据库迁移来初始化表结构，这需要你的PostgreSQL用户拥有CREATE权限。请按照以下步骤操作：
 
 1. 确保已设置环境变量 `DATABASE_URL` 和 `ADMIN_TOKEN`。
 2. 访问 `/migrate`。
@@ -34,8 +36,9 @@ php -S localhost:8000 -t . api/index.php
 
 **注意**：迁移只需运行一次，后续无需重复执行。如果数据库未迁移，系统可能无法正常运行。
 
-## Vercel搭建
+## 关于Vercel免费搭建
 
+为了满足某些白嫖用户，我们专门针对Vercel做了部署支持。
 Frok本仓库后，进入Vercel控制台导入该项目，按照环境变量格式填好环境变量即可搭建成功。
 也可点击如下链接一键部署，部署成功后再填环境变量之后重新Deploy一次即可。  
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/JanePHPDev/ZuzShortURL)
