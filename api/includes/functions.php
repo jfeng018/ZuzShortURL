@@ -12,14 +12,15 @@ function validate_csrf_token($token) {
     return hash_equals($_SESSION['csrf_token'] ?? '', $token);
 }
 
-function validate_captcha($token, $pdo) {  // 添加 $pdo 参数
-    $turnstile_enabled = get_setting($pdo, 'turnstile_enabled') === 'true';
+function validate_captcha($token, $pdo) {
+    global $settings;
+    $turnstile_enabled = $settings['turnstile_enabled'] ?? 'false' === 'true';
     if (!$turnstile_enabled) {
-        return true; // 如果未启用，则跳过验证
+        return true;
     }
-    $cf_secret_key = get_setting($pdo, 'turnstile_secret_key');
+    $cf_secret_key = $settings['turnstile_secret_key'] ?? '';
     if (empty($cf_secret_key)) {
-        return false; // 未配置密钥
+        return false;
     }
     $url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
     $data = [
@@ -31,9 +32,9 @@ function validate_captcha($token, $pdo) {  // 添加 $pdo 参数
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);  // 添加超时
+    curl_setopt($ch, CURLOPT_TIMEOUT, 3);  // 进一步减为3s
     $response = curl_exec($ch);
-    if ($response === false) {  // 添加错误检查
+    if ($response === false) {
         error_log('CAPTCHA 验证 cURL 错误: ' . curl_error($ch));
         curl_close($ch);
         return false;
@@ -48,35 +49,37 @@ function check_rate_limit($pdo) {
     $max_requests = 120;
     $window_seconds = 60;
 
-    $stmt_check_recent = $pdo->prepare("
-        SELECT request_count 
+    $stmt = $pdo->prepare("
+        SELECT request_count, window_start 
         FROM rate_limits 
-        WHERE ip = ? 
-        AND window_start > NOW() - INTERVAL '1 minute'
+        WHERE ip = ?
     ");
-    $stmt_check_recent->execute([$ip]);
-    $row_recent = $stmt_check_recent->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$ip]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($row_recent && (int)$row_recent['request_count'] >= $max_requests) {
-        http_response_code(429);
-        die('请求过于频繁，请稍后重试。');
+    $recent = false;
+    if ($row) {
+        $window_start = strtotime($row['window_start']);
+        if (time() - $window_start < $window_seconds) {
+            $recent = true;
+            if ((int)$row['request_count'] >= $max_requests) {
+                http_response_code(429);
+                die('请求过于频繁，请稍后重试。');
+            }
+        }
     }
 
-    $stmt_check_any = $pdo->prepare("SELECT 1 FROM rate_limits WHERE ip = ?");
-    $stmt_check_any->execute([$ip]);
-    $row_any = $stmt_check_any->fetch();
-
-    if ($row_any) {
-        if ($row_recent) {
-            $stmt = $pdo->prepare("UPDATE rate_limits SET request_count = request_count + 1 WHERE ip = ?");
-            $stmt->execute([$ip]);
+    if ($row) {
+        if ($recent) {
+            $update_stmt = $pdo->prepare("UPDATE rate_limits SET request_count = request_count + 1 WHERE ip = ?");
+            $update_stmt->execute([$ip]);
         } else {
-            $stmt = $pdo->prepare("UPDATE rate_limits SET request_count = 1, window_start = NOW() WHERE ip = ?");
-            $stmt->execute([$ip]);
+            $update_stmt = $pdo->prepare("UPDATE rate_limits SET request_count = 1, window_start = NOW() WHERE ip = ?");
+            $update_stmt->execute([$ip]);
         }
     } else {
-        $stmt = $pdo->prepare("INSERT INTO rate_limits (ip, request_count, window_start) VALUES (?, 1, NOW())");
-        $stmt->execute([$ip]);
+        $insert_stmt = $pdo->prepare("INSERT INTO rate_limits (ip, request_count, window_start) VALUES (?, 1, NOW())");
+        $insert_stmt->execute([$ip]);
     }
 }
 
@@ -124,19 +127,15 @@ function require_admin_auth() {
 }
 
 function get_setting($pdo, $key) {
-    if (!$pdo) {
-        error_log('PDO connection is null in get_setting');
-        return ($key === 'allow_guest' ? false : true);
-    }
-    $stmt = $pdo->prepare("SELECT value FROM settings WHERE \"key\" = ?");
-    $stmt->execute([$key]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? $row['value'] : ($key === 'allow_guest' ? false : true);
+    global $settings;
+    return $settings[$key] ?? ($key === 'allow_guest' ? false : true);
 }
 
 function set_setting($pdo, $key, $value) {
+    global $settings;
     $stmt = $pdo->prepare("INSERT INTO settings (\"key\", value) VALUES (?, ?) ON CONFLICT (\"key\") DO UPDATE SET value = ?");
     $stmt->execute([$key, $value, $value]);
+    $settings[$key] = $value;
 }
 
 function logout() {

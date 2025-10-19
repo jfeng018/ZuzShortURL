@@ -231,59 +231,7 @@ $admin_token = getenv('ADMIN_TOKEN') ?: '';
 try {
     $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    $pdo->beginTransaction();  // ç”¨äº‹åŠ¡åŒ…è£¹æ‰€æœ‰è¡¨æ“ä½œ
-    
-    $pdo->exec("CREATE TABLE IF NOT EXISTS short_links (
-        id SERIAL PRIMARY KEY,
-        shortcode VARCHAR(10) UNIQUE NOT NULL,
-        longurl TEXT NOT NULL,
-        user_id INT DEFAULT NULL,
-        enable_intermediate_page BOOLEAN DEFAULT FALSE,
-        redirect_delay INT DEFAULT 0,
-        link_password TEXT DEFAULT NULL,
-        expiration_date TIMESTAMP DEFAULT NULL,
-        clicks INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS expiration_date TIMESTAMP DEFAULT NULL;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS redirect_delay INT DEFAULT 0;");
-    $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS link_password TEXT DEFAULT NULL;");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
-        ip INET PRIMARY KEY,
-        request_count INT DEFAULT 0,
-        window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
-        sess_id VARCHAR(128) PRIMARY KEY,
-        sess_data TEXT NOT NULL,
-        sess_lifetime INT NOT NULL,
-        sess_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
-        \"key\" VARCHAR(50) PRIMARY KEY,
-        value TEXT DEFAULT 'true'
-    )");
-    $pdo->exec("ALTER TABLE settings ALTER COLUMN value TYPE TEXT;");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', 'true') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_enabled', 'false') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_site_key', '') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_secret_key', '') ON CONFLICT (\"key\") DO NOTHING");
-    $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
-    $pdo->exec("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);");
-    
-    $pdo->commit();  // æäº¤äº‹åŠ¡
 } catch (PDOException $e) {
-    if (isset($pdo)) $pdo->rollBack();  // å›æ»š
     http_response_code(500);
     die('æ•°æ®åº“è¿æ¥å¤±è´¥: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
 }
@@ -297,7 +245,7 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
-$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard', 'migrate'];
 
 $domain = $_SERVER['HTTP_HOST'];
 $protocol = 'https';
@@ -2244,6 +2192,8 @@ if ($path === '/' || $path === '') {
     require 'login.php';
 } elseif ($path === '/register') {
     require 'register.php';
+} elseif ($path === '/migrate') {
+    require 'migrate.php';
 } elseif ($path === '/dashboard') {
     require 'dashboard.php';
 } elseif ($path === '/logout') {
@@ -2869,3 +2819,170 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // ä¿®å¤ï¼šä½¿ç”¨ $_SERVER['REQUE
     <?php include 'includes/footer.php'; ?>
 </body>
 </html>
+migrate.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$csrf_token = generate_csrf_token();
+$error = '';
+$success = '';
+$admin_authenticated = require_admin_auth();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRFä»¤ç‰Œæ— æ•ˆã€‚';
+    } else {
+        try {
+            $pdo->beginTransaction();
+            
+            $pdo->exec("CREATE TABLE IF NOT EXISTS short_links (
+                id SERIAL PRIMARY KEY,
+                shortcode VARCHAR(10) UNIQUE NOT NULL,
+                longurl TEXT NOT NULL,
+                user_id INT DEFAULT NULL,
+                enable_intermediate_page BOOLEAN DEFAULT FALSE,
+                redirect_delay INT DEFAULT 0,
+                link_password TEXT DEFAULT NULL,
+                expiration_date TIMESTAMP DEFAULT NULL,
+                clicks INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;");
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS expiration_date TIMESTAMP DEFAULT NULL;");
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS redirect_delay INT DEFAULT 0;");
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN IF NOT EXISTS link_password TEXT DEFAULT NULL;");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+                ip INET PRIMARY KEY,
+                request_count INT DEFAULT 0,
+                window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+                sess_id VARCHAR(128) PRIMARY KEY,
+                sess_data TEXT NOT NULL,
+                sess_lifetime INT NOT NULL,
+                sess_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+                \"key\" VARCHAR(50) PRIMARY KEY,
+                value TEXT DEFAULT 'true'
+            )");
+            $pdo->exec("ALTER TABLE settings ALTER COLUMN value TYPE TEXT;");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_guest', 'false') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('allow_register', 'true') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('private_mode', 'false') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_enabled', 'false') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_site_key', '') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("INSERT INTO settings (\"key\", value) VALUES ('turnstile_secret_key', '') ON CONFLICT (\"key\") DO NOTHING");
+            $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id) FROM short_links), 1), true);");
+            $pdo->exec("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1), true);");
+            
+            $pdo->commit();
+            $success = 'æ•°æ®åº“è¿ç§»æˆåŠŸï¼';
+            header('Location: /admin');
+            exit;
+        } catch (PDOException $e) {
+            $pdo->rollBack();
+            $error = 'è¿ç§»å¤±è´¥: ' . htmlspecialchars($e->getMessage());
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>æ•°æ®åº“è¿ç§» - Zuz.Asia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        popover: {
+                            DEFAULT: "hsl(var(--popover))",
+                            foreground: "hsl(var(--popover-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                },
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="includes/styles.css">
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <main class="container mx-auto p-4 pt-20">
+        <div class="max-w-md mx-auto bg-card rounded-lg border p-6">
+            <h2 class="text-2xl font-bold mb-4">æ•°æ®åº“è¿ç§»</h2>
+            <p class="text-muted-foreground mb-4">é¦–æ¬¡éƒ¨ç½²æ—¶ï¼Œè¯·è¿è¡Œæ­¤è¿ç§»ä»¥åˆå§‹åŒ–æ•°æ®åº“ç»“æ„ã€‚</p>
+            <?php if ($error): ?>
+                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo $error; ?></div>
+            <?php endif; ?>
+            <?php if ($success): ?>
+                <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?php echo $success; ?></div>
+            <?php endif; ?>
+            <?php if (!$admin_authenticated): ?>
+                <form method="post">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2">ç®¡ç†å‘˜ä»¤ç‰Œ (ADMIN_TOKEN)</label>
+                        <input type="password" name="admin_token" class="w-full px-3 py-2 border border-input rounded-md" required>
+                    </div>
+                    <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">éªŒè¯å¹¶è¿ç§»</button>
+                </form>
+            <?php else: ?>
+                <form method="post">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">è¿è¡Œè¿ç§»</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    </main>
+</body>
+</html>
+favicon.ico
+        
+  ¨     (       @          €                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          áÓá6Á¯Á‚Ç´Æuîçî                                                                                                            È´Èd‚Oûihÿjiÿ–r™îÔÅ×F                                                                                                    ùõù™w˜íYXÿ ÿ()ÿXfÿ€\•úËÀÕoşşÿ                                                                                            èİè/~A}ÿ:9ÿ   ÿ   ÿÿJkÿiB–ÿªÅ´ãßî1ÿÿÿ                                                                                    çàçDqpÿ11ÿ   ÿ   ÿ   ÿÿ5]ÿK%”ÿn^²û˜’ËÁµ³Ş~ÚÚğJííùÿÿÿ                                                                    İÑİWi
+mÿ*.ÿ   ÿ   ÿ   ÿ   ÿ   ÿ)ÿ.nÿ:/œÿ=:·ÿDJÆÿpwÖû—Ÿä¿áäù(                                                                É±Ëjcrÿ"ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ,ÿ\ÿ"1Œÿ+KĞÿœìÍúûş                                                            ¾©Å}]yÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ3ŠÿPrîÿãéı-                                                            ¸ªÃYÿ ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ:˜ÿUyõıäêş(                                                            ª—½¢Pÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ.wÿ \ëÿš­úÁÿÿÿ                                                            ¢¼µIÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ0}ÿ"]ìÿ‘¥úÒèîş                                                                 “¾ÈC ‚ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ3…ÿ$^îÿ—ªúÍîòÿ                                                                ÿÿÿ•ˆ¾Ø<"€ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ  ÿ6ÿ(`ïÿš­úÄñõÿ                                                                    ÿÿÿˆ|¾æ4#{ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ ÿ9•ÿ-bğÿ•ªú­ìñş                                                                        ÿÿÿƒzÁô/${ÿ   ÿ   ÿ   ÿ   ÿ   ÿ 	ÿ<œÿ2dòÿ¡²ú«ğôş	                                                                            óòú{wÄş*%xÿ   ÿ   ÿ   ÿ   ÿÿ>¡ÿ6fòÿª¹û§õøÿ                                                                                æåõ(daÆÿ!"kÿ   ÿ   ÿ   ÿÿ?¦ÿ:hóÿ°¾û¢ùûÿ                                                                                    ååõ;LPÈÿ aÿ   ÿ   ÿ	ÿAªÿ>kóÿ´Âûüıÿ                                                                                        ååõL8GÍÿ!_ÿ   ÿ
+ÿC¯ÿ>kôü±Àûşÿÿ                                                                                            æç÷7O_×ÿ2Šÿ.ÿE¶ÿDnôü«¼ûzÿÿÿ                                                                                                ûûş¤¬ë½2Xãÿ$XçÿSwõü³Âûxÿÿÿ                                                                                                        õ÷ı	¿É÷b²½ø†ÔŞıB                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÃÿÿÿÿÿÿ ÿÿ ÿÿ ÿÿ  ÿÿ  ÿ  ÿ  ÿ  ÿ  ÿÿ ÿş ÿş ÿş ÿş ÿş ?ÿş ÿş ÿÿşÿÿşÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ

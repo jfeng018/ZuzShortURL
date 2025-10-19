@@ -14,6 +14,8 @@ if (strpos($path, '.') !== false && file_exists($file_path) && is_file($file_pat
         default => 'application/octet-stream'
     };
     header('Content-Type: ' . $mime);
+    header('Cache-Control: public, max-age=3600');
+    header('ETag: "' . md5_file($file_path) . '"');
     readfile($file_path);
     exit;
 }
@@ -23,16 +25,16 @@ require_once 'includes/functions.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-$private_mode = get_setting($pdo, 'private_mode') === 'true';
+$private_mode = ($settings['private_mode'] ?? 'false') === 'true';
 $require_admin = $private_mode && !require_admin_auth();
 
-if ($require_admin && ($path === '/' || $path === '/create' || $path === '/login' || $path === '/register' || $path === '/dashboard')) {
+if ($require_admin && in_array($path, ['/', '/create', '/login', '/register', '/dashboard'])) {
     header('Location: /admin');
     exit;
 }
 
 if ($path === '/' || $path === '') {
-    // home 逻辑 (原 home.php)
+    // home 逻辑
     $history = [];
     if (isset($_COOKIE['short_history'])) {
         $history = json_decode($_COOKIE['short_history'], true) ?: [];
@@ -245,7 +247,7 @@ if ($path === '/' || $path === '') {
     </body>
     </html>
     <?php
-    exit; // 重要：结束 home 输出
+    exit;
 } elseif ($path === '/create') {
     require 'create.php';
 } elseif ($path === '/admin') {
@@ -265,7 +267,6 @@ if ($path === '/' || $path === '') {
 } elseif ($path === '/api/docs') {
     require 'api.php';
 } elseif ($path === '/api/create' && $method === 'POST') {
-    // API 逻辑 (保持不变)
     header('Content-Type: application/json');
     check_rate_limit($pdo);
     $input = json_decode(file_get_contents('php://input'), true);
@@ -308,6 +309,7 @@ if ($path === '/' || $path === '') {
     echo json_encode($response);
     exit;
 } elseif (preg_match('/^\/([A-Za-z0-9]{5,10})$/', $path, $matches)) {
+    $code = $matches[1];
     require 'redirect.php';
 } else {
     http_response_code(404);
@@ -318,7 +320,6 @@ if ($path === '/' || $path === '') {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>404 - 未找到</title>
-        <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="bg-background text-foreground min-h-screen flex items-center justify-center">

@@ -201,7 +201,7 @@ if ($show_list) {
     <link rel="stylesheet" href="includes/styles.css">
 </head>
 <body class="bg-background text-foreground min-h-screen">
-    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold">Zuz.Asia - 管理面板</h1>
             <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
@@ -434,38 +434,38 @@ if ($show_list) {
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">允许未注册用户使用（默认允许）</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="allow_guest" <?php echo get_setting($pdo, 'allow_guest') === 'true' ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="allow_guest" <?php echo ($settings['allow_guest'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">允许用户注册（默认允许）</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="allow_register" <?php echo get_setting($pdo, 'allow_register') === 'true' ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="allow_register" <?php echo ($settings['allow_register'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">私有模式（仅管理员）</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="private_mode" <?php echo get_setting($pdo, 'private_mode') === 'true' ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="private_mode" <?php echo ($settings['private_mode'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium">启用Cloudflare Turnstile</span>
                                 <label class="switch">
-                                    <input type="checkbox" name="turnstile_enabled" <?php echo get_setting($pdo, 'turnstile_enabled') === 'true' ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="turnstile_enabled" <?php echo ($settings['turnstile_enabled'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium mb-2">Turnstile Site Key</label>
-                                <input type="text" name="turnstile_site_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>">
+                                <input type="text" name="turnstile_site_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_site_key'] ?? ''); ?>">
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium mb-2">Turnstile Secret Key</label>
-                                <input type="text" name="turnstile_secret_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_secret_key')); ?>">
+                                <input type="text" name="turnstile_secret_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_secret_key'] ?? ''); ?>">
                             </div>
                             <button type="submit" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
                         </div>

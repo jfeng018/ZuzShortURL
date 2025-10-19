@@ -4,7 +4,9 @@ if (defined('CONFIG_PHP_INCLUDED')) {
 }
 define('CONFIG_PHP_INCLUDED', true);
 
-require_once __DIR__ . '/../vendor/autoload.php';
+ob_start('ob_gzhandler'); // 输出压缩优化性能
+
+require_once __DIR__ . '/../vendor/autoload.php'; // 调整路径如果必要
 
 use Chillerlan\QRCode\QRCode;
 use Chillerlan\QRCode\QROptions;
@@ -70,7 +72,7 @@ $pass = $db_url['pass'] ?? '';
 $admin_token = getenv('ADMIN_TOKEN') ?: '';
 
 try {
-    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass);
+    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass, [PDO::ATTR_PERSISTENT => true]); // 持久连接优化
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     http_response_code(500);
@@ -79,12 +81,22 @@ try {
 
 $handler = new DatabaseSessionHandler($pdo);
 session_set_save_handler($handler, true);
+
+ini_set('session.gc_probability', 1);
+ini_set('session.gc_divisor', 1000);
+
 session_start();
 
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+
+$settings_stmt = $pdo->query("SELECT \"key\", value FROM settings");
+$settings = [];
+while ($row = $settings_stmt->fetch(PDO::FETCH_ASSOC)) {
+    $settings[$row['key']] = $row['value'];
+}
 
 $reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard', 'migrate'];
 
