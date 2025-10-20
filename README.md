@@ -22,7 +22,7 @@ CREATE DATABASE <数据库名>;
 CREATE USER <数据库用户名> WITH PASSWORD '<数据库密码>';
 
 -- 授予数据库权限
-GRANT ALL PRIVILEGES ON DATABASE zuzshorturl TO <数据库用户名>;
+GRANT ALL PRIVILEGES ON DATABASE <数据库名> TO <数据库用户名>;
 
 -- 连接到数据库
 \c <数据库名>
