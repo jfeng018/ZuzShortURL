@@ -104,7 +104,7 @@ sudo chmod -R 755 .
 ## 环境变量格式
 
 项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。
-如果需要部署到个人VPS上，必须手动导入.env内容到环境变量。
+如果需要部署到个人VPS上，可参考上方内容，如不使用Apache，必须手动导入.env内容到环境变量。
 ```env
 DATABASE_URL="你的PostgreSQL连接符"
 ADMIN_TOKEN="你的Token"
