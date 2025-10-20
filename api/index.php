@@ -48,12 +48,14 @@ $is_official = $current_host === $official_domain;
 $is_short = $current_host === $short_domain;
 $is_short_code = preg_match('/^\/([A-Za-z0-9]{5,10})$/', $request_uri, $matches);
 
-if ($is_official && $is_short_code) {
+// 只在启用双域名模式且当前是官方域名时，重定向短码到短域名（修复循环）
+if ($enable_dual_domain && $is_official && $is_short_code) {
     header('Location: ' . $short_url . $matches[0]);
     exit;
 }
 
-if ($is_short) {
+// 只在启用双域名模式且当前是短域名时，进行根路径重定向或404（修复循环）
+if ($enable_dual_domain && $is_short) {
     if ($path === '/' || $path === '') {
         header('Location: ' . $official_url);
         exit;
@@ -78,54 +80,7 @@ if ($path === '/' || $path === '') {
         <title><?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia - 即时缩短链接'); ?></title>
         <link rel="stylesheet" href="./includes/styles.css">
         <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            border: "hsl(var(--border))",
-                            input: "hsl(var(--input))",
-                            ring: "hsl(var(--ring))",
-                            background: "hsl(var(--background))",
-                            foreground: "hsl(var(--foreground))",
-                            primary: {
-                                DEFAULT: "hsl(var(--primary))",
-                                foreground: "hsl(var(--primary-foreground))",
-                            },
-                            secondary: {
-                                DEFAULT: "hsl(var(--secondary))",
-                                foreground: "hsl(var(--secondary-foreground))",
-                            },
-                            destructive: {
-                                DEFAULT: "hsl(var(--destructive))",
-                                foreground: "hsl(var(--destructive-foreground))",
-                            },
-                            muted: {
-                                DEFAULT: "hsl(var(--muted))",
-                                foreground: "hsl(var(--muted-foreground))",
-                            },
-                            accent: {
-                                DEFAULT: "hsl(var(--accent))",
-                                foreground: "hsl(var(--accent-foreground))",
-                            },
-                            popover: {
-                                DEFAULT: "hsl(var(--popover))",
-                                foreground: "hsl(var(--popover-foreground))",
-                            },
-                            card: {
-                                DEFAULT: "hsl(var(--card))",
-                                foreground: "hsl(var(--card-foreground))",
-                            },
-                        },
-                        borderRadius: {
-                            lg: "var(--radius)",
-                            md: "calc(var(--radius) - 2px)",
-                            sm: "calc(var(--radius) - 4px)",
-                        },
-                    },
-                }
-            }
-        </script>
+        <script src="includes/script.js"></script>
     </head>
     <body class="bg-background text-foreground min-h-screen">
         <?php include 'includes/header.php'; ?>

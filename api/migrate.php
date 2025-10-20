@@ -83,6 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             value TEXT DEFAULT 'true'
         )");
 
+        // 动态获取当前域名（纯域名，不含协议）
+        $currentDomain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
         $defaults = [
             'allow_guest'        => 'false',
             'allow_register'     => 'true',
@@ -91,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'enable_dual_domain' => 'false',
             'turnstile_site_key' => '',
             'turnstile_secret_key' => '',
-            'official_domain' => '',
+            'official_domain' => $currentDomain, // 仅域名，如 example.com
             'short_domain' => '',
             'site_title' => 'Zuz.Asia',
             'header_title' => 'Zuz.Asia',
@@ -101,7 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'intermediate_text' => '您将被重定向到以下链接:'
         ];
         foreach ($defaults as $k => $v) {
-            $stmt = $pdo->prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT DO NOTHING");
+            $stmt = $pdo->prepare("
+                INSERT INTO settings (key, value) VALUES (?, ?) 
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value 
+                WHERE settings.value IS NULL OR settings.value = ''
+            ");
             $stmt->execute([$k, $v]);
         }
 
