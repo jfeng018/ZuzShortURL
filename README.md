@@ -22,7 +22,7 @@
 - [数据库迁移](#数据库迁移)
 - [关于Vercel免费搭建](#关于vercel免费搭建)
 - [免费数据库方案（Supabase）](#免费数据库方案supabase)
-- [⚠️ 贡献政策例外声明](#️-贡献政策例外声明)
+- [⚠️ 贡献政策例外声明](#️贡献政策例外声明)
 
 ## Apache + PostgreSQL 部署方案
 
@@ -104,9 +104,9 @@ sudo chmod -R 755 .
 ## 环境变量格式
 
 项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。
-如果需要部署到个人VPS上，可参考上方内容，如不使用Apache，必须手动导入.env内容到环境变量。
+如果需要部署到个人VPS上，可参考上方内容，如不使用Apache，必须手动导入下方内容到环境变量。
 ```env
-DATABASE_URL="你的PostgreSQL连接符"
+DATABASE_URL="postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>"
 ADMIN_TOKEN="你的Token"
 ```
 
