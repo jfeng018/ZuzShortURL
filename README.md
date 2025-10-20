@@ -6,6 +6,8 @@
 *由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。  
 *当前开发版已经过测试，可同步更新
 
+  ![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
+
 ## 环境变量格式
 
 项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。
