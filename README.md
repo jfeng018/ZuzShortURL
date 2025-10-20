@@ -1,4 +1,5 @@
 # ZuzShortURL
+<img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/1dfc553c491976d9.png" alt="1dfc553c491976d9.png" title="1dfc553c491976d9.png" />
 基于PHP + PostgreSQL构建的、为创业团队、电商平台及中小型企业量身打造的下一代短链接SaaS解决方案。
 
 [在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)
