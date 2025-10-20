@@ -6,7 +6,80 @@
 *由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。  
 *当前开发版已经过测试，可同步更新
 
-  ![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
+![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
+
+## Apache + PostgreSQL 部署方案
+
+### 准备 PostgreSQL 数据库 
+
+首先创建数据库和用户，并授予必要的权限：
+
+```sql
+-- 创建数据库
+CREATE DATABASE <数据库名>;
+
+-- 创建用户
+CREATE USER <数据库用户名> WITH PASSWORD '<数据库密码>';
+
+-- 授予数据库权限
+GRANT ALL PRIVILEGES ON DATABASE zuzshorturl TO <数据库用户名>;
+
+-- 连接到数据库
+\c <数据库名>
+
+-- 授予 Schema 权限（重要！）
+ALTER SCHEMA public OWNER TO <数据库用户名>;
+GRANT ALL ON SCHEMA public TO <数据库用户名>;
+```
+
+### 配置 Apache 虚拟主机 
+
+编辑 Apache 配置文件（通常在 /etc/apache2/sites-available/ 或 /etc/httpd/conf.d/）：
+
+```apache
+<VirtualHost *:80>
+    # 强制跳转到 HTTPS
+    Redirect permanent / https://<你的域名>/
+</VirtualHost>
+
+<VirtualHost *:443>
+    # 运行目录
+    DocumentRoot /var/www/<站点根目录>/api
+
+    # 中文占位符环境变量
+    SetEnv DATABASE_URL "postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>"
+    SetEnv ADMIN_TOKEN   "<你的管理员令牌>"
+</VirtualHost>
+```
+
+启用必要的 Apache 模块 
+```sh
+启用 rewrite 模块（用于伪静态）
+sudo a2enmod rewrite
+
+启用 env 模块（用于环境变量）
+sudo a2enmod env
+
+重启 Apache
+sudo systemctl restart apache2
+```
+
+### 设置文件权限 
+
+```sh
+进入项目目录
+cd /var/www/<网站根目录>
+
+设置所有者为 Apache 用户（根据系统不同可能是 www-data 或 apache）
+sudo chown -R www-data:www-data .
+
+设置适当的权限
+sudo chmod -R 755 .
+```
+
+运行数据库迁移必须保持这些：
+- 确保 PostgreSQL 服务正在运行
+- 确保 PHP 已安装 pdo_pgsql 扩展
 
 ## 环境变量格式
 
