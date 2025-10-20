@@ -13,7 +13,7 @@ if (!is_logged_in()) {
 }
 
 $user_id = get_current_user_id();
-$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];  // 添加定义
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
 $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
@@ -21,14 +21,14 @@ $links = [];
 $sort = $_GET['sort'] ?? 'time';
 $order = $sort === 'clicks' ? 'clicks DESC' : 'created_at DESC';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     check_rate_limit($pdo);
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
     } else {
         $action = $_POST['action'] ?? '';
         if ($action === 'add') {
-            if (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
+            if (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
                 $error = 'CAPTCHA验证失败。';
             } else {
                 $longurl = trim($_POST['url'] ?? '');
@@ -39,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
                 $expiration = $_POST['expiration'] ?? null;
                 
-                // 添加过期日期验证
                 if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
                     $error = '无效的过期日期格式。';
                 }
@@ -49,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 } else {
                     $code = '';
                     if (!empty($custom_code)) {
-                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);  // 使用定义的 $reserved_codes
+                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
                         if ($validate === true) {
                             $code = $custom_code;
                         } else {
@@ -58,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                     }
                     if (empty($code)) {
                         try {
-                            $code = generate_random_code($pdo, $reserved_codes);  // 使用定义的 $reserved_codes
+                            $code = generate_random_code($pdo, $reserved_codes);
                         } catch (Exception $e) {
                             $error = '生成短码失败。';
                         }
@@ -80,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
             $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
             $expiration = $_POST['expiration'] ?? null;
             
-            // 添加过期日期验证
             if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
                 $error = '无效的过期日期格式。';
             }
@@ -93,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 $error = '无效的新URL。';
             } else {
                 $enable_str = $enable_intermediate ? 'true' : 'false';
-                $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ? WHERE shortcode = ? AND user_id = ?");  // 添加 user_id 到 WHERE 以确保权限
+                $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ? WHERE shortcode = ? AND user_id = ?");
                 $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $code, $user_id]);
                 $success = '链接更新成功。';
             }
@@ -122,7 +120,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>用户控制台 - Zuz.Asia</title>
+    <title>用户控制台 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -205,7 +203,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             <?php foreach ($links as $link): ?>
                 <div class="bg-card rounded-lg border p-4">
                     <div class="flex items-center space-x-2 mb-2">
-                        <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                        <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                         <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                     </div>
                     <p class="text-muted-foreground text-sm mb-4 truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
@@ -252,7 +250,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center space-x-2">
-                                    <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                     <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                 </div>
                             </td>
@@ -327,7 +325,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                         <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                         <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
                     </div>
-                    <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                    <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
                     <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
                     <?php endif; ?>
                     <div class="flex gap-2">
@@ -384,7 +382,6 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             const button = document.getElementById('sortButton');
             button.textContent = currentSort === 'time' ? '按时间排序' : '按流量排序';
         }
-        // 初始化按钮文本
         document.addEventListener('DOMContentLoaded', () => {
             const button = document.getElementById('sortButton');
             button.textContent = currentSort === 'time' ? '按时间排序' : '按流量排序';

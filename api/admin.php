@@ -12,7 +12,7 @@ $input_token = $_POST['token'] ?? '';
 $valid_token = hash_equals($admin_token, $input_token);
 $active_tab = $_GET['tab'] ?? 'dashboard';
 
-if ($method === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
     } elseif (!$valid_token && !require_admin_auth()) {
@@ -104,14 +104,32 @@ if ($method === 'POST') {
                 $allow_guest = isset($_POST['allow_guest']) ? 'true' : 'false';
                 $allow_register = isset($_POST['allow_register']) ? 'true' : 'false';
                 $turnstile_enabled = isset($_POST['turnstile_enabled']) ? 'true' : 'false';
+                $enable_dual_domain = isset($_POST['enable_dual_domain']) ? 'true' : 'false';
                 $turnstile_site_key = trim($_POST['turnstile_site_key'] ?? '');
                 $turnstile_secret_key = trim($_POST['turnstile_secret_key'] ?? '');
+                $official_domain = trim($_POST['official_domain'] ?? '');
+                $short_domain = trim($_POST['short_domain'] ?? '');
+                $site_title = trim($_POST['site_title'] ?? '');
+                $header_title = trim($_POST['header_title'] ?? '');
+                $home_description = trim($_POST['home_description'] ?? '');
+                $home_image_url = trim($_POST['home_image_url'] ?? '');
+                $intermediate_logo_url = trim($_POST['intermediate_logo_url'] ?? '');
+                $intermediate_text = trim($_POST['intermediate_text'] ?? '');
                 set_setting($pdo, 'private_mode', $private_mode);
                 set_setting($pdo, 'allow_guest', $allow_guest);
                 set_setting($pdo, 'allow_register', $allow_register);
                 set_setting($pdo, 'turnstile_enabled', $turnstile_enabled);
+                set_setting($pdo, 'enable_dual_domain', $enable_dual_domain);
                 set_setting($pdo, 'turnstile_site_key', $turnstile_site_key);
                 set_setting($pdo, 'turnstile_secret_key', $turnstile_secret_key);
+                set_setting($pdo, 'official_domain', $official_domain);
+                set_setting($pdo, 'short_domain', $short_domain);
+                set_setting($pdo, 'site_title', $site_title);
+                set_setting($pdo, 'header_title', $header_title);
+                set_setting($pdo, 'home_description', $home_description);
+                set_setting($pdo, 'home_image_url', $home_image_url);
+                set_setting($pdo, 'intermediate_logo_url', $intermediate_logo_url);
+                set_setting($pdo, 'intermediate_text', $intermediate_text);
                 $success = '设置更新成功。';
                 break;
             case 'logout':
@@ -148,7 +166,7 @@ if ($show_list) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理面板 - Zuz.Asia</title>
+    <title>管理面板 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -296,7 +314,7 @@ if ($show_list) {
                         <?php foreach ($links as $link): ?>
                             <div class="bg-card rounded-lg border p-4">
                                 <div class="flex items-center space-x-2 mb-2">
-                                    <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                     <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                 </div>
                                 <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
@@ -342,7 +360,7 @@ if ($show_list) {
                                     <tr>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center space-x-2">
-                                                <input type="text" value="<?php echo htmlspecialchars($base_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                                 <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                             </div>
                                         </td>
@@ -432,40 +450,104 @@ if ($show_list) {
                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                         <div class="bg-card rounded-lg border p-6 space-y-4">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium">允许未注册用户使用（默认允许）</span>
+                                <div>
+                                    <span class="text-sm font-medium">允许未注册用户使用</span>
+                                    <p class="text-xs text-muted-foreground">允许未登录用户创建短链接，默认开启。</p>
+                                </div>
                                 <label class="switch">
                                     <input type="checkbox" name="allow_guest" <?php echo ($settings['allow_guest'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium">允许用户注册（默认允许）</span>
+                                <div>
+                                    <span class="text-sm font-medium">允许用户注册</span>
+                                    <p class="text-xs text-muted-foreground">允许新用户注册账号，默认开启。</p>
+                                </div>
                                 <label class="switch">
                                     <input type="checkbox" name="allow_register" <?php echo ($settings['allow_register'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium">私有模式（仅管理员）</span>
+                                <div>
+                                    <span class="text-sm font-medium">私有模式（仅管理员）</span>
+                                    <p class="text-xs text-muted-foreground">仅允许管理员访问和创建短链接，默认关闭。</p>
+                                </div>
                                 <label class="switch">
                                     <input type="checkbox" name="private_mode" <?php echo ($settings['private_mode'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium">启用Cloudflare Turnstile</span>
+                                <div>
+                                    <span class="text-sm font-medium">启用Cloudflare Turnstile</span>
+                                    <p class="text-xs text-muted-foreground">启用CAPTCHA验证以防止机器人滥用，默认关闭。</p>
+                                </div>
                                 <label class="switch">
                                     <input type="checkbox" name="turnstile_enabled" <?php echo ($settings['turnstile_enabled'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                             </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">启用双域名模式</span>
+                                    <p class="text-xs text-muted-foreground">使用单独的短链接域名，关闭则使用官网域名，默认关闭。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="enable_dual_domain" <?php echo ($settings['enable_dual_domain'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium mb-2">Turnstile Site Key</label>
+                                <p class="text-xs text-muted-foreground mb-2">Cloudflare Turnstile的站点密钥，用于CAPTCHA验证。</p>
                                 <input type="text" name="turnstile_site_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_site_key'] ?? ''); ?>">
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium mb-2">Turnstile Secret Key</label>
+                                <p class="text-xs text-muted-foreground mb-2">Cloudflare Turnstile的密钥，用于服务器端验证。</p>
                                 <input type="text" name="turnstile_secret_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_secret_key'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">官网域名</label>
+                                <p class="text-xs text-muted-foreground mb-2">网站主域名，例如example.com，用于页面显示。</p>
+                                <input type="text" name="official_domain" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['official_domain'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">短链接域名</label>
+                                <p class="text-xs text-muted-foreground mb-2">短链接使用的域名，例如zuz.asia，仅在双域名模式启用时生效。</p>
+                                <input type="text" name="short_domain" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['short_domain'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">站点标题</label>
+                                <p class="text-xs text-muted-foreground mb-2">网站的标题，显示在页面标题栏和SEO标签中。</p>
+                                <input type="text" name="site_title" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['site_title'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Header标题</label>
+                                <p class="text-xs text-muted-foreground mb-2">导航栏显示的标题，默认为站点标题。</p>
+                                <input type="text" name="header_title" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['header_title'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">首页简介</label>
+                                <p class="text-xs text-muted-foreground mb-2">首页显示的网站描述，用于介绍服务内容。</p>
+                                <textarea name="home_description" class="w-full px-3 py-2 border border-input rounded-md"><?php echo htmlspecialchars($settings['home_description'] ?? ''); ?></textarea>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">首页展示图URL</label>
+                                <p class="text-xs text-muted-foreground mb-2">首页显示的图片URL，用于美化首页。</p>
+                                <input type="text" name="home_image_url" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['home_image_url'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">中继页Logo URL</label>
+                                <p class="text-xs text-muted-foreground mb-2">中继页面显示的Logo图片URL，留空则不显示。</p>
+                                <input type="text" name="intermediate_logo_url" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['intermediate_logo_url'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">中继页文案</label>
+                                <p class="text-xs text-muted-foreground mb-2">中继页面显示的提示文本，默认为“您将被重定向到以下链接:”。</p>
+                                <textarea name="intermediate_text" class="w-full px-3 py-2 border border-input rounded-md"><?php echo htmlspecialchars($settings['intermediate_text'] ?? ''); ?></textarea>
                             </div>
                             <button type="submit" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
                         </div>

@@ -4,7 +4,7 @@ require_once __DIR__ . '/functions.php';
 ?>
 <nav class="header-card border-b border-border px-4 py-2 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
     <div class="container mx-auto flex justify-between items-center">
-        <h1 class="text-2xl font-bold">Zuz.Asia</h1>
+        <h1 class="text-2xl font-bold"><?php echo htmlspecialchars(get_setting($pdo, 'header_title') ?? 'Zuz.Asia'); ?></h1>
         <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
         <div class="hidden md:flex space-x-4 desktop-menu">
             <?php if (is_logged_in()): ?>

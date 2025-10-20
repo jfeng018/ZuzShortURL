@@ -4,10 +4,10 @@ require_once 'includes/functions.php';
 
 $csrf_token = generate_csrf_token();
 $error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
-    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
         $error = 'CAPTCHA验证失败。';
     } else {
         $username = trim($_POST['username'] ?? '');
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - Zuz.Asia</title>
+    <title>登录 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -90,34 +90,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
 </head>
 <body class="bg-background text-foreground min-h-screen flex flex-col">
     <?php include 'includes/header.php'; ?>
-    <div class="flex-grow flex items-center justify-center pt-16"> <!-- 添加 pt-16 以补偿 Turnstile 可能的影响 -->
-        <div class="max-w-md w-full p-4 bg-card rounded-lg border"> <!-- p-6 -> p-4 -->
-            <h2 class="text-2xl font-bold mb-4 text-center inline-flex items-center justify-center"> <!-- mb-6 -> mb-4 -->
+    <div class="flex-grow flex items-center justify-center pt-16">
+        <div class="max-w-md w-full p-4 bg-card rounded-lg border">
+            <h2 class="text-2xl font-bold mb-4 text-center inline-flex items-center justify-center">
                 <svg class="h-6 w-6 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg>
                 登录
             </h2>
             <?php if ($error): ?>
-                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($error); ?></div> <!-- px-4 py-3 mb-4 -> px-3 py-2 mb-3 -->
+                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($error); ?></div>
             <?php endif; ?>
             <form method="post">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                <div class="mb-3"> <!-- mb-4 -> mb-3 -->
-                    <label class="block text-sm font-medium mb-1">用户名</label> <!-- mb-2 -> mb-1 -->
-                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required> <!-- px-3 py-2 -> px-2 py-1 -->
+                <div class="mb-3">
+                    <label class="block text-sm font-medium mb-1">用户名</label>
+                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
-                <div class="mb-4"> <!-- mb-6 -> mb-4 -->
+                <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">密码</label>
                     <input type="password" name="password" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
-                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
-                <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div> <!-- 添加 mb-3 -->
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
+                <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
                 <?php endif; ?>
-                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button> <!-- py-2 mt-4 -> py-1 mt-3 -->
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button>
             </form>
             <?php if (get_setting($pdo, 'allow_register') === 'true'): ?>
-                <p class="mt-3 text-center text-sm">没有账号？<a href="/register">注册</a></p> <!-- mt-4 -> mt-3 -->
+                <p class="mt-3 text-center text-sm">没有账号？<a href="/register">注册</a></p>
             <?php endif; ?>
         </div>
     </div>

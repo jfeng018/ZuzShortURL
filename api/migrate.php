@@ -1,5 +1,4 @@
 <?php
-/* 独立迁移脚本，只认环境变量 DATABASE_URL */
 $error = '';
 $success = '';
 
@@ -89,8 +88,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'allow_register'     => 'true',
             'private_mode'       => 'false',
             'turnstile_enabled'  => 'false',
+            'enable_dual_domain' => 'false',
             'turnstile_site_key' => '',
-            'turnstile_secret_key' => ''
+            'turnstile_secret_key' => '',
+            'official_domain' => '',
+            'short_domain' => '',
+            'site_title' => 'Zuz.Asia',
+            'header_title' => 'Zuz.Asia',
+            'home_description' => 'Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建的便利。',
+            'home_image_url' => 'https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg',
+            'intermediate_logo_url' => '',
+            'intermediate_text' => '您将被重定向到以下链接:'
         ];
         foreach ($defaults as $k => $v) {
             $stmt = $pdo->prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT DO NOTHING");
@@ -124,8 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="includes/styles.css">
 </head>
-<body class="bg-background text-foreground min-h-screen">
-<main class="container mx-auto p-4 pt-20">
+<body class="bg-background text-foreground min-h-screen flex items-center justify-center">
+<main class="container mx-auto p-4">
     <div class="max-w-md mx-auto bg-card rounded-lg border p-6">
         <h2 class="text-2xl font-bold mb-4">数据库迁移</h2>
         <p class="text-muted-foreground mb-4">首次部署时，请运行此迁移以初始化数据库结构。</p>

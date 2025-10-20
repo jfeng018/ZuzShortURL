@@ -18,14 +18,13 @@ if (!$link) {
 }
 
 if ($link['expiration_date'] && strtotime($link['expiration_date']) < time()) {
-    // 显示已过期页面
 ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>链接已过期 - Zuz.Asia</title>
+        <title>链接已过期 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -102,7 +101,7 @@ if (!empty($link['link_password'])) {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>密码保护 - Zuz.Asia</title>
+            <title>密码保护 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
             <script src="https://cdn.tailwindcss.com"></script>
             <script>
                 tailwind.config = {
@@ -191,7 +190,7 @@ if ($link['enable_intermediate_page']) {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>正在跳转 - Zuz.Asia</title>
+        <title>正在跳转 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
         <meta http-equiv="refresh" content="<?php echo $link['redirect_delay']; ?>;url=<?php echo htmlspecialchars($link['longurl']); ?>">
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
@@ -249,8 +248,11 @@ if ($link['enable_intermediate_page']) {
         <div class="flex-grow flex items-center justify-center">
             <div class="container mx-auto p-4">
                 <div class="max-w-lg mx-auto bg-card rounded-lg border p-6 text-center">
+                    <?php if ($intermediate_logo_url = get_setting($pdo, 'intermediate_logo_url')): ?>
+                        <img src="<?php echo htmlspecialchars($intermediate_logo_url); ?>" alt="Logo" class="mx-auto mb-4 h-16">
+                    <?php endif; ?>
                     <h2 class="text-2xl font-bold mb-4">正在跳转...</h2>
-                    <p class="text-muted-foreground mb-4">您将被重定向到以下链接:</p>
+                    <p class="text-muted-foreground mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'intermediate_text') ?? '您将被重定向到以下链接:'); ?></p>
                     <a href="<?php echo htmlspecialchars($link['longurl']); ?>" class="text-primary font-mono break-all hover:underline"><?php echo htmlspecialchars($link['longurl']); ?></a>
                     <p class="text-sm text-muted-foreground mt-4"><?php echo $link['redirect_delay']; ?>秒后自动跳转，或点击上面的链接立即跳转。</p>
                     <div class="mt-6">

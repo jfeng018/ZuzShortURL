@@ -40,8 +40,31 @@ if ($require_admin && in_array($path, ['/', '/create', '/login', '/register', '/
     exit;
 }
 
+$current_host = $_SERVER['HTTP_HOST'];
+$official_domain = get_setting($pdo, 'official_domain') ?? $current_host;
+$short_domain = get_setting($pdo, 'short_domain') ?? $current_host;
+
+$is_official = $current_host === $official_domain;
+$is_short = $current_host === $short_domain;
+$is_short_code = preg_match('/^\/([A-Za-z0-9]{5,10})$/', $request_uri, $matches);
+
+if ($is_official && $is_short_code) {
+    header('Location: ' . $short_url . $matches[0]);
+    exit;
+}
+
+if ($is_short) {
+    if ($path === '/' || $path === '') {
+        header('Location: ' . $official_url);
+        exit;
+    } elseif (!$is_short_code) {
+        http_response_code(404);
+        echo '404 Not Found';
+        exit;
+    }
+}
+
 if ($path === '/' || $path === '') {
-    // home 逻辑
     $history = [];
     if (isset($_COOKIE['short_history'])) {
         $history = json_decode($_COOKIE['short_history'], true) ?: [];
@@ -52,7 +75,7 @@ if ($path === '/' || $path === '') {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Zuz.Asia - 即时缩短链接</title>
+        <title><?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia - 即时缩短链接'); ?></title>
         <link rel="stylesheet" href="./includes/styles.css">
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
@@ -109,8 +132,8 @@ if ($path === '/' || $path === '') {
         <div class="container mx-auto px-4 py-4 pt-20">
             <section class="hero-section mb-8 bg-card/50 rounded-xl p-4 md:p-8 md:flex md:items-center md:space-x-8">
                 <div class="md:w-1/2 mb-4 md:mb-0">
-                    <h1 class="text-4xl md:text-6xl font-bold mb-4">Zuz.Asia</h1>
-                    <p class="text-lg md:text-xl text-muted-foreground max-w-md">Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建的便利。</p>
+                    <h1 class="text-4xl md:text-6xl font-bold mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'header_title') ?? 'Zuz.Asia'); ?></h1>
+                    <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description') ?? 'Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建创建的便利。'); ?></p>
                     <div class="space-x-4 mt-6">
                         <?php if (is_logged_in()): ?>
                             <a href="/dashboard" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
@@ -121,11 +144,10 @@ if ($path === '/' || $path === '') {
                     </div>
                 </div>
                 <div class="md:w-1/2">
-                    <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url') ?? 'https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg'); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
                 </div>
             </section>
 
-            <!-- 新增图文混排板块 -->
             <section class="mb-8 md:mb-16 bg-card rounded-xl overflow-hidden">
                 <div class="grid md:grid-cols-2 gap-0">
                     <div class="p-8 md:p-12 flex flex-col justify-center">
@@ -237,7 +259,6 @@ if ($path === '/' || $path === '') {
                 </div>
             </section>
             
-                        <!-- CEO发言板块 -->
             <section class="mb-8 md:mb-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-8 md:p-12 text-white relative overflow-hidden">
                 <div class="absolute inset-0 opacity-10">
                     <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -332,8 +353,6 @@ if ($path === '/' || $path === '') {
     require 'login.php';
 } elseif ($path === '/register') {
     require 'register.php';
-} elseif ($path === '/migrate') {
-    require 'migrate.php';
 } elseif ($path === '/dashboard') {
     require 'dashboard.php';
 } elseif ($path === '/logout') {
@@ -379,7 +398,7 @@ if ($path === '/' || $path === '') {
     $enable_str = $enable_intermediate ? 'true' : 'false';
     $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, enable_intermediate_page, redirect_delay, expiration_date) VALUES (?, ?, ?, ?, ?)");
     $stmt->execute([$code, $longurl, $enable_str, $redirect_delay, $expiration ?: null]);
-    $short_url = $base_url . '/' . $code;
+    $short_url = $short_url . '/' . $code;
     $response['success'] = true;
     $response['short_url'] = $short_url;
     echo json_encode($response);

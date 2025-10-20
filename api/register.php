@@ -11,10 +11,10 @@ $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
-    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
         $error = 'CAPTCHA验证失败。';
     } else {
         $username = trim($_POST['username'] ?? '');
@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>注册 - Zuz.Asia</title>
+    <title>注册 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                     <label class="block text-sm font-medium mb-1">确认密码</label>
                     <input type="password" name="confirm_password" class="w-full px-2 py-3 border border-input rounded-md" required>
                 </div>
-                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
                 <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
                 <?php endif; ?>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">注册</button>

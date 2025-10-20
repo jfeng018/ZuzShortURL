@@ -12,8 +12,7 @@ if (get_setting($pdo, 'allow_guest') === 'false' && !is_logged_in()) {
     exit;
 }
 
-$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];  // 添加定义
-
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
 $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
@@ -22,11 +21,11 @@ $code = '';
 $user_id = is_logged_in() ? get_current_user_id() : null;
 $is_logged_in = is_logged_in();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUEST_METHOD']
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     check_rate_limit($pdo);
     if (!validate_csrf_token($_POST['csrf'] ?? '')) {
         $error = 'CSRF令牌无效。';
-    } elseif (!validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {  // 添加 $pdo 参数
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
         $error = 'CAPTCHA验证失败。';
     } else {
         $longurl = trim($_POST['url'] ?? '');
@@ -37,7 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
         $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
         $expiration = $_POST['expiration'] ?? null;
         
-        // 添加过期日期验证
         if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
             $error = '无效的过期日期格式。';
         }
@@ -47,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
         } else {
             $code = '';
             if (!empty($custom_code)) {
-                $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);  // 使用定义的 $reserved_codes
+                $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
                 if ($validate === true) {
                     $code = $custom_code;
                 } else {
@@ -56,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
             }
             if (empty($code)) {
                 try {
-                    $code = generate_random_code($pdo, $reserved_codes);  // 使用定义的 $reserved_codes
+                    $code = generate_random_code($pdo, $reserved_codes);
                 } catch (Exception $e) {
                     $error = '生成短码失败。';
                 }
@@ -65,17 +63,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                 $enable_str = $enable_intermediate ? 'true' : 'false';
                 $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
-                $short_url = $base_url . '/' . $code;
+                $short_url = $short_url . '/' . $code;
                 $success = '短链接创建成功！';
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
                 $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_url, 'created_at' => time()];
                 $history = array_slice($history, -5);
-                // 优化 Cookie：使用数组参数，提升安全
                 setcookie('short_history', json_encode($history), [
                     'expires' => time() + (30 * 24 * 3600),
                     'path' => '/',
                     'httponly' => true,
-                    'secure' => true,  // 如果用 HTTPS
+                    'secure' => true,
                     'samesite' => 'Lax'
                 ]);
             }
@@ -88,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>创建短链接 - Zuz.Asia</title>
+    <title>创建短链接 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -182,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {  // 修复：使用 $_SERVER['REQUE
                     <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
                     <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
                 </div>
-                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>  <!-- 只在启用时显示 CAPTCHA -->
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
                 <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
                 <?php endif; ?>
                 <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 mt-4">创建短链接</button>

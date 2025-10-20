@@ -4,9 +4,9 @@ if (defined('CONFIG_PHP_INCLUDED')) {
 }
 define('CONFIG_PHP_INCLUDED', true);
 
-ob_start('ob_gzhandler'); // 输出压缩优化性能
+ob_start('ob_gzhandler');
 
-require_once __DIR__ . '/../vendor/autoload.php'; // 调整路径如果必要
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use Chillerlan\QRCode\QRCode;
 use Chillerlan\QRCode\QROptions;
@@ -72,7 +72,7 @@ $pass = $db_url['pass'] ?? '';
 $admin_token = getenv('ADMIN_TOKEN') ?: '';
 
 try {
-    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass, [PDO::ATTR_PERSISTENT => true]); // 持久连接优化
+    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass, [PDO::ATTR_PERSISTENT => true]);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     http_response_code(500);
@@ -100,7 +100,13 @@ while ($row = $settings_stmt->fetch(PDO::FETCH_ASSOC)) {
 
 $reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard', 'migrate'];
 
-$domain = $_SERVER['HTTP_HOST'];
+$current_domain = $_SERVER['HTTP_HOST'];
+$official_domain = $settings['official_domain'] ?? $current_domain;
+$enable_dual_domain = ($settings['enable_dual_domain'] ?? 'false') === 'true';
+$short_domain = $enable_dual_domain ? ($settings['short_domain'] ?? $current_domain) : $official_domain;
+
 $protocol = 'https';
-$base_url = $protocol . '://' . $domain;
+$official_url = $protocol . '://' . $official_domain;
+$short_url = $protocol . '://' . $short_domain;
+$base_url = $short_url;
 ?>

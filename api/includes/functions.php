@@ -32,7 +32,7 @@ function validate_captcha($token, $pdo) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 3);  // 进一步减为3s
+    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
     $response = curl_exec($ch);
     if ($response === false) {
         error_log('CAPTCHA 验证 cURL 错误: ' . curl_error($ch));
@@ -128,7 +128,7 @@ function require_admin_auth() {
 
 function get_setting($pdo, $key) {
     global $settings;
-    return $settings[$key] ?? ($key === 'allow_guest' ? false : true);
+    return $settings[$key] ?? ($key === 'allow_guest' || $key === 'enable_dual_domain' ? 'false' : 'true');
 }
 
 function set_setting($pdo, $key, $value) {
