@@ -1,5 +1,11 @@
 # ZuzShortURL
-<img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/1dfc553c491976d9.png" alt="1dfc553c491976d9.png" title="1dfc553c491976d9.png" />
+<img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/1dfc553c491976d9.png" alt="Logo" />
+
+[![GitHub Repo stars](https://img.shields.io/github/stars/JanePHPDev/ZuzShortURL?style=social)](https://github.com/JanePHPDev/ZuzShortURL)
+[![GitHub forks](https://img.shields.io/github/forks/JanePHPDev/ZuzShortURL?style=social)](https://github.com/JanePHPDev/ZuzShortURL)
+[![GitHub license](https://img.shields.io/github/license/JanePHPDev/ZuzShortURL)](https://github.com/JanePHPDev/ZuzShortURL/blob/main/LICENSE)
+[![GitHub issues](https://img.shields.io/github/issues/JanePHPDev/ZuzShortURL)](https://github.com/JanePHPDev/ZuzShortURL/issues)
+
 基于PHP + PostgreSQL构建的、为创业团队、电商平台及中小型企业量身打造的下一代短链接SaaS解决方案。
 
 [在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)
