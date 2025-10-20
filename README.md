@@ -3,7 +3,7 @@
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" />
 
 *Release仅用于版本发布，使用时请Frok本仓库或点击一键部署。  
-*由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。
+*由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。  
 *当前开发版已经过测试，可同步更新
 
 ## 环境变量格式
