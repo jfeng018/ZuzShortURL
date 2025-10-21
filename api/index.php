@@ -46,15 +46,17 @@ $short_domain = get_setting($pdo, 'short_domain') ?? $current_host;
 
 $is_official = $current_host === $official_domain;
 $is_short = $current_host === $short_domain;
-$is_short_code = preg_match('/^\/([A-Za-z0-9]{5,10})$/', $request_uri, $matches);
 
-// 只在启用双域名模式且当前是官方域名时，重定向短码到短域名（修复循环）
+$excluded_paths = ['/create', '/admin', '/login', '/register', '/dashboard', '/logout', '/api/docs'];
+$short_code_match = preg_match('/^\/([A-Za-z0-9]{5,10})$/', $path, $matches);
+$is_short_code = $short_code_match && !in_array($path, $excluded_paths);
+
 if ($enable_dual_domain && $is_official && $is_short_code) {
-    header('Location: ' . $short_url . $matches[0]);
+    http_response_code(404);
+    echo '404 Not Found';
     exit;
 }
 
-// 只在启用双域名模式且当前是短域名时，进行根路径重定向或404（修复循环）
 if ($enable_dual_domain && $is_short) {
     if ($path === '/' || $path === '') {
         header('Location: ' . $official_url);
@@ -77,7 +79,7 @@ if ($path === '/' || $path === '') {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title><?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia - 即时缩短链接'); ?></title>
+        <title><?php echo htmlspecialchars(get_setting($pdo, 'site_title')); ?></title>
         <link rel="stylesheet" href="./includes/styles.css">
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="includes/script.js"></script>
@@ -87,8 +89,8 @@ if ($path === '/' || $path === '') {
         <div class="container mx-auto px-4 py-4 pt-20">
             <section class="hero-section mb-8 bg-card/50 rounded-xl p-4 md:p-8 md:flex md:items-center md:space-x-8">
                 <div class="md:w-1/2 mb-4 md:mb-0">
-                    <h1 class="text-4xl md:text-6xl font-bold mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'header_title') ?? 'Zuz.Asia'); ?></h1>
-                    <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description') ?? 'Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建创建的便利。'); ?></p>
+                    <h1 class="text-4xl md:text-6xl font-bold mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'header_title')); ?></h1>
+                    <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description')); ?></p>
                     <div class="space-x-4 mt-6">
                         <?php if (is_logged_in()): ?>
                             <a href="/dashboard" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
@@ -99,7 +101,7 @@ if ($path === '/' || $path === '') {
                     </div>
                 </div>
                 <div class="md:w-1/2">
-                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url') ?? 'https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg'); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
                 </div>
             </section>
 
@@ -230,7 +232,7 @@ if ($path === '/' || $path === '') {
                         </div>
                     </div>
                     <blockquote class="text-xl md:text-2xl font-light mb-6 italic">
-                        "Zuz.Asia 展现了现代 Web 开发的精髓——简洁、高效、用户至上。这个项目完美诠释了如何用最新的技术栈打造出真正解决用户痛点的工具。"
+                        "这个项目展现了现代 Web 开发的精髓——简洁、高效、用户至上。这个项目完美诠释了如何用最新的技术栈打造出真正解决用户痛点的工具。"
                     </blockquote>
                     <div class="flex items-center space-x-6 text-sm">
                         <div class="flex items-center">
@@ -353,12 +355,11 @@ if ($path === '/' || $path === '') {
     $enable_str = $enable_intermediate ? 'true' : 'false';
     $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, enable_intermediate_page, redirect_delay, expiration_date) VALUES (?, ?, ?, ?, ?)");
     $stmt->execute([$code, $longurl, $enable_str, $redirect_delay, $expiration ?: null]);
-    $short_url = $short_url . '/' . $code;
     $response['success'] = true;
-    $response['short_url'] = $short_url;
+    $response['short_url'] = $short_url . '/' . $code;
     echo json_encode($response);
     exit;
-} elseif (preg_match('/^\/([A-Za-z0-9]{5,10})$/', $path, $matches)) {
+} elseif ($short_code_match && !in_array($path, $excluded_paths)) {
     $code = $matches[1];
     require 'redirect.php';
 } else {
