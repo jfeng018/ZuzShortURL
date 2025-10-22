@@ -108,7 +108,7 @@ if ($path === '/' || $path === '') {
             <section class="mb-8 md:mb-16 bg-card rounded-xl overflow-hidden">
                 <div class="grid md:grid-cols-2 gap-0">
                     <div class="p-8 md:p-12 flex flex-col justify-center">
-                        <h2 class="text-3xl md:text-4xl font-bold mb-6">为什么选择 Zuz.Asia？</h2>
+                        <h2 class="text-3xl md:text-4xl font-bold mb-6">为什么选择我们？</h2>
                         <div class="space-y-6">
                             <div class="flex items-start space-x-4">
                                 <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -146,7 +146,7 @@ if ($path === '/' || $path === '') {
                         </div>
                     </div>
                     <div class="relative h-64 md:h-auto">
-                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/b6ff251d07560b6a.jpeg" alt="技术优势" class="absolute inset-0 w-full h-full object-cover">
+                        <img src="https://img.cdn1.vip/i/68f819e067446_1761090016.webp" alt="技术优势" class="absolute inset-0 w-full h-full object-cover">
                         <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent md:hidden"></div>
                     </div>
                 </div>
@@ -228,7 +228,7 @@ if ($path === '/' || $path === '') {
                         <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/98625d409de6929e.jpg" alt="Vercel CEO" class="w-16 h-16 rounded-full mr-4 border-2 border-white/30">
                         <div>
                             <h3 class="text-xl font-bold">JanePHPDev</h3>
-                            <p class="text-purple-100">Zuz.Asia CEO ＆ 开发者</p>
+                            <p class="text-purple-100">ZeinkLab CEO ＆ 开发者</p>
                         </div>
                     </div>
                     <blockquote class="text-xl md:text-2xl font-light mb-6 italic">
