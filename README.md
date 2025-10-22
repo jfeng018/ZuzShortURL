@@ -8,7 +8,10 @@
 
 基于PHP + PostgreSQL构建的、为创业团队、电商平台及中小型企业量身打造的下一代短链接SaaS解决方案。
 
-[在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)
+[在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)  
+Demo站后台地址：https://zuz.asia/admin
+Demo站后台token：admintoken
+Demo站会定时清空数据，请勿长期使用，需要短链接服务请访问官网
 
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" alt="ZuzShortURL 双端预览截图" />
 
