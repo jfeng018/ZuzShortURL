@@ -14,7 +14,7 @@
 
 *Release仅用于版本发布，使用时请Fork本仓库或点击一键部署。  
 *由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理退出上线。  
-*当前开发版已经过测试，可同步更新
+*当前版本为正式版v1.1.9，可直接更新
 
 ![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
 
