@@ -158,6 +158,7 @@ Fork本仓库后，进入Vercel控制台导入该项目，按照环境变量格�
 > 3. 输入管理员Token。  
 > 4. 点击“运行迁移”按钮。  
 > 5. 迁移成功后，将自动重定向到管理面板。  
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/JanePHPDev/ZuzShortURL)
 
 ## 免费数据库方案（Supabase）
