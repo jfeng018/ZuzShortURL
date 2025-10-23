@@ -152,6 +152,12 @@ php -S localhost:8000 -t . api/index.php
 为了满足某些白嫖用户，我们专门针对Vercel做了部署支持。
 Fork本仓库后，进入Vercel控制台导入该项目，按照环境变量格式填好环境变量即可搭建成功。
 也可点击如下链接一键部署，部署成功后再填环境变量之后重新Deploy一次即可。  
+同样，部署完成之后首次访问需要进行运行迁移，请参考上方给出的方案：  
+> 1. 确保已设置环境变量 `DATABASE_URL` 和 `ADMIN_TOKEN`。  
+> 2. 通过浏览器访问 `你的域名/migrate`。  
+> 3. 输入管理员Token。  
+> 4. 点击“运行迁移”按钮。  
+> 5. 迁移成功后，将自动重定向到管理面板。  
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/JanePHPDev/ZuzShortURL)
 
 ## 免费数据库方案（Supabase）
