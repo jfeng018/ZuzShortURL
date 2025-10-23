@@ -10,7 +10,7 @@
 
 [在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)  
 Demo站后台地址：https://zuz.asia/admin
-Demo站后台token：admintoken
+Demo站后台token：admintoken  
 Demo站会定时清空数据，请勿长期使用，需要短链接服务请访问官网
 
 <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg" title="双端预览图" alt="ZuzShortURL 双端预览截图" />
