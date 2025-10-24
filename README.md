@@ -1,4 +1,5 @@
 # ZuzShortURL
+## QQ群开放：491102600 欢迎加入！
 
 ![Logo](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/1dfc553c491976d9.png)
 
