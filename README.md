@@ -56,8 +56,8 @@ docker pull janephpdev/zuzshorturl:latest
 ```sh
 docker run -d \
   --name zuzshorturl-app \
-  -e DATABASE_URL="postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>" \
-  -e ADMIN_TOKEN="<你的管理员令牌>" \
+  -e DATABASE_URL=postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名> \
+  -e ADMIN_TOKEN=<你的管理员令牌> \
   -p 8437:8437 \
   janephpdev/zuzshorturl:latest
 ```
