@@ -98,7 +98,7 @@ server {
 - 停止/移除：`docker stop zuzshorturl-app && docker rm zuzshorturl-app`。
 - 更新镜像：拉取新版后重新运行。
 
-**提示**：生产环境建议使用外部 PostgreSQL（如 Supabase），并监控容器资源。:whale:
+**提示**：如PostgreSQL数据库在宿主机应该把数据库地址写为服务器公网地址，而非127.0.0.1，因为Docker中127.0.0.1指容器本身而非宿主机
 
 ## Apache + PostgreSQL 部署方案
 
