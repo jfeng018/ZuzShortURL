@@ -148,6 +148,8 @@ function set_setting(PDO $pdo, string $key, $value): void
 
     if (in_array($key, $boolKeys, true)) {
         $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        // 修复：转换为字符串，避免 PDO 布尔绑定 bug
+        $value = $value ? 'true' : 'false';
     }
 
     $stmt = $pdo->prepare(
