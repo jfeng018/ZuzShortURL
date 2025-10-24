@@ -93,7 +93,7 @@ if ($path === '/' || $path === '') {
                     <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description')); ?></p>
                     <div class="space-x-4  mt-6">
                         <?php if (is_logged_in()): ?>
-                    <a href="/dashboard" class="inline-flex items-center px-8 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
                 <?php else: ?>
                     <a href="/create" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
                 <?php endif; ?>
@@ -101,7 +101,7 @@ if ($path === '/' || $path === '') {
                     </div>
                 </div>
                 <div class="md:w-1/2">
-                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg shadow-lg">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg">
                 </div>
             </section>
 
@@ -284,7 +284,7 @@ if ($path === '/' || $path === '') {
             <section class="text-center mb-8 md:mb-16">
                 <h2 class="text-2xl md:text-3xl font-bold mb-4">准备好缩短您的第一个链接了吗？</h2>
                 <?php if (is_logged_in()): ?>
-                    <a href="/dashboard" class="inline-flex items-center px-8 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold text-lg">前往控制台</a>
+                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
                 <?php else: ?>
                     <a href="/create" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
                 <?php endif; ?>

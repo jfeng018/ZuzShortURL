@@ -9,7 +9,7 @@ require_once 'includes/functions.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>API文档 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
-        <script src="includes/script.js"></script>
+        <script src="../includes/script.js"></script>
     <link rel="stylesheet" href="../includes/styles.css">
 </head>
 <body class="bg-background text-foreground min-h-screen">
