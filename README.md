@@ -25,6 +25,7 @@ Demo站会定时清空数据，请勿长期使用，需要短链接服务请访�
 
 ## 目录
 
+- [Docker 部署方案](#docker-部署方案)
 - [Apache + PostgreSQL 部署方案](#apache--postgresql-部署方案)
   - [准备 PostgreSQL 数据库](#准备-postgresql-数据库)
   - [配置 Apache 虚拟主机](#配置-apache-虚拟主机)
@@ -36,6 +37,68 @@ Demo站会定时清空数据，请勿长期使用，需要短链接服务请访�
 - [关于Vercel免费搭建](#关于vercel免费搭建)
 - [免费数据库方案（Supabase）](#免费数据库方案supabase)
 - [⚠️ 贡献政策例外声明](#️贡献政策例外声明)
+
+## Docker 部署方案
+
+本项目提供 Docker 镜像支持，使用 Apache + PHP 8.3 构建，暴露 8437 端口（可自定义映射）。镜像已预装 `pdo_pgsql` 扩展、启用 `rewrite` 和 `env` 模块，并配置伪静态。**当前不支持 Docker Compose**，请使用 `docker run` 手动部署。
+
+### 前提条件
+- 安装 Docker（[官方下载](https://www.docker.com/products/docker-desktop/)）。
+- 准备 PostgreSQL 数据库（参考 [免费数据库方案（Supabase）](#免费数据库方案supabase) 或手动部署）。
+- 环境变量：`DATABASE_URL` 和 `ADMIN_TOKEN`（格式见 [环境变量格式](#环境变量格式)）。
+
+### 拉取镜像
+```sh
+docker pull janephpdev/zuzshorturl:latest
+```
+
+### 运行容器
+```sh
+docker run -d \
+  --name zuzshorturl-app \
+  -e DATABASE_URL="postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>" \
+  -e ADMIN_TOKEN="<你的管理员令牌>" \
+  -p 8437:8437 \
+  janephpdev/zuzshorturl:latest
+```
+
+- **参数说明**：
+  - `-d`：后台运行。
+  - `--name`：容器名称（便于管理，如 `docker stop zuzshorturl-app` 停止）。
+  - `-e`：注入环境变量（替换占位符）。
+  - `-p 8437:8437`：端口映射（宿主机 8437 → 容器 8437）。
+- **自定义端口**：如需其他端口，用 `-p 8080:8437`（宿主机 8080 → 容器 8437）。
+
+### 访问与初始化
+1. 浏览器访问 `http://localhost:8437`（或自定义端口）。
+2. 首次运行需执行数据库迁移：访问 `http://localhost:8437/migrate`，输入 `ADMIN_TOKEN`，点击“运行迁移”。
+3. 迁移成功后，重定向到管理面板（`/admin`）。
+
+### 支持 Nginx 反向代理
+在宿主机 Nginx 配置中代理 8437 端口（示例 `/etc/nginx/sites-available/default`）：
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:8437;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+- 重启 Nginx：`sudo systemctl restart nginx`。
+- 为 HTTPS 配置 SSL（如 Let's Encrypt）。
+
+### 管理容器
+- 查看日志：`docker logs zuzshorturl-app`。
+- 停止/移除：`docker stop zuzshorturl-app && docker rm zuzshorturl-app`。
+- 更新镜像：拉取新版后重新运行。
+
+**提示**：生产环境建议使用外部 PostgreSQL（如 Supabase），并监控容器资源。:whale:
 
 ## Apache + PostgreSQL 部署方案
 
