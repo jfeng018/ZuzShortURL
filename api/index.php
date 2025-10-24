@@ -93,15 +93,15 @@ if ($path === '/' || $path === '') {
                     <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description')); ?></p>
                     <div class="space-x-4  mt-6">
                         <?php if (is_logged_in()): ?>
-                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
+                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
                 <?php else: ?>
-                    <a href="/create" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
+                    <a href="/create" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
                 <?php endif; ?>
-                <a href="/api/docs" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 rounded-lg">API文档</a>
+                <a href="/api/docs" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 rounded-lg">API文档</a>
                     </div>
                 </div>
                 <div class="md:w-1/2">
-                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg mt-4">
                 </div>
             </section>
 
@@ -111,7 +111,7 @@ if ($path === '/' || $path === '') {
                         <h2 class="text-3xl md:text-4xl font-bold mb-6">为什么选择我们？</h2>
                         <div class="space-y-6">
                             <div class="flex items-start space-x-4">
-                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                                     </svg>
@@ -122,7 +122,7 @@ if ($path === '/' || $path === '') {
                                 </div>
                             </div>
                             <div class="flex items-start space-x-4">
-                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                                     </svg>
@@ -133,7 +133,7 @@ if ($path === '/' || $path === '') {
                                 </div>
                             </div>
                             <div class="flex items-start space-x-4">
-                                <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
                                     </svg>
@@ -168,7 +168,7 @@ if ($path === '/' || $path === '') {
                         </ul>
                         <div class="border-t border-border pt-4 text-center">
                             <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$22 / 月</p>
-                            <button class="w-full bg-primary text-primary-foreground py-2 px-6 rounded-lg transition-colors font-semibold">套餐暂未上线</button>
+                            <button class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg transition-colors font-semibold">套餐暂未上线</button>
                         </div>
                     </div>
                     <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card popular">
@@ -184,7 +184,7 @@ if ($path === '/' || $path === '') {
                         </ul>
                         <div class="border-t border-border pt-4 text-center">
                             <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
-                            <button onclick="window.location.href='/register'" class="w-full bg-primary text-primary-foreground py-2 px-6 rounded-lg hover:bg-primary/90 transition-colors font-semibold">
+                            <button onclick="window.location.href='/register'" class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg hover:bg-black/90 transition-colors font-semibold">
   注册使用
 </button>
                         </div>
@@ -202,7 +202,7 @@ if ($path === '/' || $path === '') {
                         </ul>
                         <div class="border-t border-border pt-4 text-center">
                             <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
-                            <button onclick="window.location.href='https://github.com/JanePHPDev/ZuzShortURL'" class="w-full bg-primary text-primary-foreground py-2 px-6 rounded-lg hover:bg-primary/90 transition-colors font-semibold">
+                            <button onclick="window.location.href='https://github.com/JanePHPDev/ZuzShortURL'" class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg hover:bg-black/90 transition-colors font-semibold">
   Fork本项目
 </button>
                         </div>
@@ -371,7 +371,7 @@ if ($path === '/' || $path === '') {
         <div class="text-center">
             <h1 class="text-6xl font-bold text-muted-foreground mb-4">404</h1>
             <p class="text-xl text-muted-foreground mb-6">页面未找到</p>
-            <a href="/" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">返回首页</a>
+            <a href="/" class="px-6 py-2 bg-black text-primary-foreground rounded-lg hover:bg-black/90 transition-colors">返回首页</a>
         </div>
     </body>
     </html>

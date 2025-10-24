@@ -136,20 +136,24 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-lg mb-4"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
         <div class="flex justify-between mb-4">
-            <div class="flex space-x-2">
-                <button onclick="toggleSort()" class="px-4 py-2 bg-primary text-primary-foreground rounded-lg md:hidden" id="sortButton">按时间排序</button>
-                <select onchange="window.location.href = '?sort=' + this.value" class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hidden md:block">
-                    <option value="time" <?php echo $sort === 'time' ? 'selected' : ''; ?>>时间排序</option>
-                    <option value="clicks" <?php echo $sort === 'clicks' ? 'selected' : ''; ?>>流量排序</option>
-                </select>
-            </div>
+        
             <div class="space-x-2">
-                <button onclick="openAddModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-lg">+ 新建链接</button>
+                <button onclick="openAddModal()" class="px-4 py-2 bg-black text-primary-foreground rounded-lg">+ 新建链接</button>
                 <form method="post" class="inline">
                     <input type="hidden" name="action" value="delete_expired">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
                                         <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
                 </form>
+            </div>
+            <div class="flex space-x-2">
+                <button onclick="toggleSort()" class="p-2 bg-black text-primary-foreground rounded-lg md:hidden" id="sortButton" title="切换排序">
+  <svg id="icon-time" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <svg id="icon-clicks" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+  </svg>
+</button>
             </div>
         </div>
         <div class="md:hidden space-y-4">
@@ -169,7 +173,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                         <p>密码保护: <?php echo $link['link_password'] ? '是' : '否'; ?></p>
                     </div>
                     <div class="flex space-x-2">
-                        <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded text-sm">编辑</button>
+                        <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="flex-1 px-3 py-2 bg-black text-primary-foreground rounded text-sm">编辑</button>
                         <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -218,7 +222,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['link_password'] ? '是' : '否'; ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
                                 <div class="flex space-x-2">
-                                    <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                    <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="bg-black text-primary-foreground px-3 py-1 rounded">编辑</button>
                                     <form method="post" class="inline" onsubmit="return confirm('删除?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -283,7 +287,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                     <?php endif; ?>
                     <div class="flex gap-2">
                         <button type="button" onclick="closeAddModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg">取消</button>
-                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-lg">添加</button>
+                        <button type="submit" class="flex-1 bg-black text-primary-foreground py-2 px-4 rounded-lg">添加</button>
                     </div>
                 </div>
             </form>
@@ -320,7 +324,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                     </div>
                     <div class="flex gap-2">
                         <button type="button" onclick="closeEditModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg">取消</button>
-                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-lg">保存</button>
+                        <button type="submit" class="flex-1 bg-black text-primary-foreground py-2 px-4 rounded-lg">保存</button>
                     </div>
                 </div>
             </form>
@@ -329,24 +333,17 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
 
     <script>
         let currentSort = '<?php echo $sort; ?>';
-        function toggleSort() {
-            currentSort = currentSort === 'time' ? 'clicks' : 'time';
-            window.location.href = '?sort=' + currentSort;
-            const button = document.getElementById('sortButton');
-            button.textContent = currentSort === 'time' ? '按时间排序' : '按流量排序';
-        }
-        document.addEventListener('DOMContentLoaded', () => {
-            const button = document.getElementById('sortButton');
-            button.textContent = currentSort === 'time' ? '按时间排序' : '按流量排序';
-        });
-        function openAddModal() {
-            const modal = document.getElementById('addModal');
-            const content = document.getElementById('addModalContent');
-            modal.classList.remove('hidden');
-            setTimeout(() => {
-                content.classList.remove('scale-95', 'opacity-0');
-            }, 10);
-        }
+function toggleSort() {
+  currentSort = currentSort === 'time' ? 'clicks' : 'time';
+  document.getElementById('icon-time').classList.toggle('hidden', currentSort !== 'time');
+  document.getElementById('icon-clicks').classList.toggle('hidden', currentSort !== 'clicks');
+  window.location.href = '?sort=' + currentSort;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('icon-time').classList.toggle('hidden', currentSort !== 'time');
+  document.getElementById('icon-clicks').classList.toggle('hidden', currentSort !== 'clicks');
+});
+
 
         function closeAddModal() {
             const modal = document.getElementById('addModal');
