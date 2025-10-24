@@ -344,6 +344,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('icon-clicks').classList.toggle('hidden', currentSort !== 'clicks');
 });
 
+function openAddModal() {
+    const modal = document.getElementById('addModal');
+    const content = document.getElementById('addModalContent');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        content.classList.remove('scale-95', 'opacity-0');
+    }, 10);
+}
+
 
         function closeAddModal() {
             const modal = document.getElementById('addModal');
