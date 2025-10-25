@@ -185,8 +185,8 @@ The project stores the PostgreSQL connection string and admin login token as env
 For deployment on a personal VPS, refer to the sections above. If not using Apache, manually add these to your environment variables.
 
 ```env
-DATABASE_URL="postgresql://<your-username>:<your-password>@<database-host>:<port>/<database-name>"
-ADMIN_TOKEN="your-token"
+DATABASE_URL=postgresql://<your-username>:<your-password>@<database-host>:<port>/<database-name>
+ADMIN_TOKEN=your-token
 ```
 
 ## Local Testing
