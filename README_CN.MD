@@ -185,8 +185,8 @@ sudo chmod -R 755 .
 如果需要部署到个人VPS上，可参考上方内容，如不使用Apache，必须手动导入下方内容到环境变量。
 
 ```env
-DATABASE_URL="postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>"
-ADMIN_TOKEN="你的Token"
+DATABASE_URL=postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>
+ADMIN_TOKEN=你的Token
 ```
 
 ## 本地测试
