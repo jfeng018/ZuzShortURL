@@ -19,7 +19,7 @@ The demo site clears data periodically—please don't use it for long-term needs
 
 > *Releases are for version announcements only. For usage, please fork this repo or use one-click deployment.*  
 > *Due to some conflicts between Vercel and PHP, features relying on Composer—like QR code generation and live code management—have been ~~temporarily suspended~~.* [^1]  
-> *The current version is stable v1.1.9 and can be updated directly.*
+> *The current warehouse is updated with the 1.1.9-C2 stable version, and the Docker warehouse has been updated synchronously.*
 
 ![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
 
