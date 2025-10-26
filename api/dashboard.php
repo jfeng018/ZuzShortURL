@@ -114,6 +114,50 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $total_links = count($links);
 $total_clicks = array_sum(array_column($links, 'clicks'));
+$avg_click_rate = $total_links > 0 ? round($total_clicks / $total_links, 2) : 0;
+
+// 来源统计 (top 10)
+$sources_query = $pdo->prepare("
+SELECT 
+  CASE 
+    WHEN referrer IS NULL OR referrer = '' THEN 'Direct'
+    ELSE regexp_replace(referrer, '^(https?://)?([^/]+).*', '\\2')
+  END AS domain,
+  COUNT(*) as count 
+FROM click_logs 
+WHERE shortcode IN (SELECT shortcode FROM short_links WHERE user_id = ?)
+GROUP BY domain 
+ORDER BY count DESC
+LIMIT 10
+");
+$sources_query->execute([$user_id]);
+$sources = $sources_query->fetchAll(PDO::FETCH_ASSOC);
+
+// Top 50 短码点击量
+$top_query = $pdo->prepare("SELECT shortcode, clicks FROM short_links WHERE user_id = ? ORDER BY clicks DESC LIMIT 50");
+$top_query->execute([$user_id]);
+$top_links = $top_query->fetchAll(PDO::FETCH_ASSOC);
+
+// 过去30天每日点击趋势
+$daily_clicks_query = $pdo->prepare("
+SELECT date(clicked_at) as day, COUNT(*) as count 
+FROM click_logs 
+WHERE shortcode IN (SELECT shortcode FROM short_links WHERE user_id = ?)
+AND clicked_at >= NOW() - INTERVAL '30 days'
+GROUP BY day 
+ORDER BY day ASC
+");
+$daily_clicks_query->execute([$user_id]);
+$daily_clicks_raw = $daily_clicks_query->fetchAll(PDO::FETCH_ASSOC);
+
+$daily_clicks = [];
+for ($i = 29; $i >= 0; $i--) {
+    $date = date('Y-m-d', strtotime("-$i days"));
+    $daily_clicks[$date] = 0;
+}
+foreach ($daily_clicks_raw as $row) {
+    $daily_clicks[$row['day']] = (int)$row['count'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -122,9 +166,22 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>用户控制台 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
-        <script src="includes/script.js"></script>
+    <script src="includes/script.js"></script>
     <link rel="stylesheet" href="includes/styles.css">
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://cdn.mengze.vip/npm/chart.js"></script>
+    <style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
     <?php include 'includes/header.php'; ?>
@@ -142,7 +199,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                 <form method="post" class="inline">
                     <input type="hidden" name="action" value="delete_expired">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                                        <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
+                    <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
                 </form>
             </div>
             <div class="flex space-x-2">
@@ -241,7 +298,7 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
                 </tbody>
             </table>
         </div>
-        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-card rounded-lg border p-6 text-center">
                 <h3 class="text-lg font-semibold text-muted-foreground">总链接数</h3>
                 <p class="text-3xl font-bold"><?php echo $total_links; ?></p>
@@ -249,6 +306,24 @@ $total_clicks = array_sum(array_column($links, 'clicks'));
             <div class="bg-card rounded-lg border p-6 text-center">
                 <h3 class="text-lg font-semibold text-muted-foreground">总点击量</h3>
                 <p class="text-3xl font-bold"><?php echo $total_clicks; ?></p>
+            </div>
+            <div class="bg-card rounded-lg border p-6 text-center">
+                <h3 class="text-lg font-semibold text-muted-foreground">平均点击率</h3>
+                <p class="text-3xl font-bold"><?php echo $avg_click_rate; ?></p>
+            </div>
+        </div>
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-card rounded-lg border p-6">
+                <h3 class="text-lg font-semibold mb-4">每日点击趋势 (折线图, 过去30天)</h3>
+                <div class="chart-container">
+                    <canvas id="dailyLine"></canvas>
+                </div>
+            </div>
+            <div class="bg-card rounded-lg border p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 点击短码 (柱状图)</h3>
+                <div class="chart-container">
+                    <canvas id="topBar"></canvas>
+                </div>
             </div>
         </div>
     </main>
@@ -402,6 +477,52 @@ function openAddModal() {
             if (event.target === addModal) closeAddModal();
             if (event.target === editModal) closeEditModal();
         }
+
+        // 图表渲染
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED', '#C9CBCF', '#ADFF2F', '#20B2AA'];
+
+        // Top 短码柱状图
+        const topLabels = <?php echo json_encode(array_column($top_links, 'shortcode')); ?>;
+        const topData = <?php echo json_encode(array_column($top_links, 'clicks')); ?>;
+        new Chart(document.getElementById('topBar'), {
+            type: 'bar',
+            data: {
+                labels: topLabels,
+                datasets: [{
+                    label: '点击量',
+                    data: topData,
+                    backgroundColor: colors[0]
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 每日点击折线图
+        const dailyLabels = <?php echo json_encode(array_keys($daily_clicks)); ?>;
+        const dailyData = <?php echo json_encode(array_values($daily_clicks)); ?>;
+        new Chart(document.getElementById('dailyLine'), {
+            type: 'line',
+            data: {
+                labels: dailyLabels,
+                datasets: [{
+                    label: '每日点击',
+                    data: dailyData,
+                    borderColor: colors[1],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
     </script>
 </body>
 </html>

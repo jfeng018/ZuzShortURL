@@ -159,6 +159,74 @@ if ($show_list) {
     $total_links = $pdo->query("SELECT COUNT(*) as count FROM short_links")->fetch()['count'];
     $total_clicks = $pdo->query("SELECT SUM(clicks) as sum FROM short_links")->fetch()['sum'] ?? 0;
     $click_rate = $total_links > 0 ? round(($total_clicks / $total_links) * 100, 2) : 0;
+
+    $sources = $pdo->query("
+SELECT 
+  CASE 
+    WHEN referrer IS NULL OR referrer = '' THEN 'Direct'
+    ELSE regexp_replace(referrer, '^(https?://)?([^/]+).*', '\\2')
+  END AS domain,
+  COUNT(*) as count 
+FROM click_logs 
+GROUP BY domain 
+ORDER BY count DESC
+LIMIT 10
+")->fetchAll(PDO::FETCH_ASSOC);
+
+    $top_links = $pdo->query("SELECT shortcode, clicks FROM short_links ORDER BY clicks DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+
+    $daily_clicks_raw = $pdo->query("
+SELECT date(clicked_at) as day, COUNT(*) as count 
+FROM click_logs 
+WHERE clicked_at >= NOW() - INTERVAL '30 days'
+GROUP BY day 
+ORDER BY day ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+    $daily_clicks = [];
+    for ($i = 29; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $daily_clicks[$date] = 0;
+    }
+    foreach ($daily_clicks_raw as $row) {
+        $daily_clicks[$row['day']] = (int)$row['count'];
+    }
+
+    $reg_raw = $pdo->query("SELECT date(created_at) as day, COUNT(*) as count FROM users WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY day ORDER BY day ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $registrations = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $registrations[$date] = 0;
+    }
+    foreach ($reg_raw as $row) {
+        $registrations[$row['day']] = (int)$row['count'];
+    }
+
+    $new_links_raw = $pdo->query("SELECT date(created_at) as day, COUNT(*) as count FROM short_links WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY day ORDER BY day ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $new_links = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $new_links[$date] = 0;
+    }
+    foreach ($new_links_raw as $row) {
+        $new_links[$row['day']] = (int)$row['count'];
+    }
+
+    $last7_reg = $pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '7 days' AND created_at < NOW()")->fetchColumn();
+    $prev7_reg = $pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'")->fetchColumn();
+    if ($prev7_reg > 0) {
+        $growth_reg = round(($last7_reg - $prev7_reg) / $prev7_reg * 100, 2) . '%';
+    } else {
+        $growth_reg = $last7_reg > 0 ? 'New' : '0%';
+    }
+
+    $last7_links = $pdo->query("SELECT COUNT(*) FROM short_links WHERE created_at >= NOW() - INTERVAL '7 days' AND created_at < NOW()")->fetchColumn();
+    $prev7_links = $pdo->query("SELECT COUNT(*) FROM short_links WHERE created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'")->fetchColumn();
+    if ($prev7_links > 0) {
+        $growth_links = round(($last7_links - $prev7_links) / $prev7_links * 100, 2) . '%';
+    } else {
+        $growth_links = $last7_links > 0 ? 'New' : '0%';
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -170,6 +238,19 @@ if ($show_list) {
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="includes/script.js"></script>
     <link rel="stylesheet" href="includes/styles.css">
+    <script src="https://cdn.mengze.vip/npm/chart.js"></script>
+    <style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
     <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
@@ -249,6 +330,32 @@ if ($show_list) {
                         <div class="bg-card rounded-lg border p-6 text-center">
                             <h3 class="text-lg font-semibold text-muted-foreground">点击率</h3>
                             <p class="text-3xl font-bold"><?php echo $click_rate; ?>%</p>
+                        </div>
+                    </div>
+                    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">每日点击趋势 (折线图, 过去30天)</h3>
+                            <div class="chart-container">
+                                <canvas id="dailyLine"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">Top 点击短码 (柱状图)</h3>
+                            <div class="chart-container">
+                                <canvas id="topBar"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">近7日注册量 (折线图)</h3>
+                            <div class="chart-container">
+                                <canvas id="regLine"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">近7日新建链接量 (折线图)</h3>
+                            <div class="chart-container">
+                                <canvas id="newLinksLine"></canvas>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -540,8 +647,8 @@ if ($show_list) {
                         <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
                     </div>
                     <div class="flex gap-2">
-                        <button type="button" onclick="closeAddLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md hover:bg-secondary/80">取消</button>
-                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90">添加</button>
+                        <button type="button" onclick="closeAddLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md">取消</button>
+                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md">添加</button>
                     </div>
                 </div>
             </form>
@@ -578,8 +685,8 @@ if ($show_list) {
                         <input type="date" name="expiration" id="editLinkExpiration" class="w-full px-3 py-2 border border-input rounded-md">
                     </div>
                     <div class="flex gap-2">
-                        <button type="button" onclick="closeEditLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md hover:bg-secondary/80">取消</button>
-                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90">保存</button>
+                        <button type="button" onclick="closeEditLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md">取消</button>
+                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md">保存</button>
                     </div>
                 </div>
             </form>
@@ -647,6 +754,98 @@ if ($show_list) {
             if (event.target === addLinkModal) closeAddLinkModal();
             if (event.target === editLinkModal) closeEditLinkModal();
         }
+
+        // 图表渲染 (仅 dashboard tab)
+        <?php if ($active_tab === 'dashboard'): ?>
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED', '#C9CBCF', '#ADFF2F', '#20B2AA'];
+
+        // Top 短码柱状图
+        const topLabels = <?php echo json_encode(array_column($top_links, 'shortcode')); ?>;
+        const topData = <?php echo json_encode(array_column($top_links, 'clicks')); ?>;
+        new Chart(document.getElementById('topBar'), {
+            type: 'bar',
+            data: {
+                labels: topLabels,
+                datasets: [{
+                    label: '点击量',
+                    data: topData,
+                    backgroundColor: colors[0]
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 每日点击折线图
+        const dailyLabels = <?php echo json_encode(array_keys($daily_clicks)); ?>;
+        const dailyData = <?php echo json_encode(array_values($daily_clicks)); ?>;
+        new Chart(document.getElementById('dailyLine'), {
+            type: 'line',
+            data: {
+                labels: dailyLabels,
+                datasets: [{
+                    label: '每日点击',
+                    data: dailyData,
+                    borderColor: colors[1],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 近7日注册折线图
+        const regLabels = <?php echo json_encode(array_keys($registrations)); ?>;
+        const regData = <?php echo json_encode(array_values($registrations)); ?>;
+        new Chart(document.getElementById('regLine'), {
+            type: 'line',
+            data: {
+                labels: regLabels,
+                datasets: [{
+                    label: '每日注册',
+                    data: regData,
+                    borderColor: colors[2],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 近7日新建链接折线图
+        const newLinksLabels = <?php echo json_encode(array_keys($new_links)); ?>;
+        const newLinksData = <?php echo json_encode(array_values($new_links)); ?>;
+        new Chart(document.getElementById('newLinksLine'), {
+            type: 'line',
+            data: {
+                labels: newLinksLabels,
+                datasets: [{
+                    label: '每日新建链接',
+                    data: newLinksData,
+                    borderColor: colors[3],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+        <?php endif; ?>
     </script>
 </body>
 </html>
