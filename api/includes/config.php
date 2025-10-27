@@ -105,10 +105,14 @@ $official_domain = $settings['official_domain'] ?? $current_domain;
 $enable_dual_domain = ($settings['enable_dual_domain'] ?? 'false') === 'true';
 $short_domain = $enable_dual_domain ? ($settings['short_domain'] ?? $current_domain) : $official_domain;
 
-// 动态检测协议（修复硬编码 'http' 问题）
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$protocol = 'http';
+if (isset($_SERVER['HTTP_IN_DOCKER_HTTPS']) && $_SERVER['HTTP_IN_DOCKER_HTTPS'] === 'true') {
+    $protocol = 'https';
+} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    $protocol = 'https';
+}
 
 $official_url = $protocol . '://' . $official_domain;
-$short_url = $protocol . '://' . $short_domain;
-$base_url = $short_url;
+$short_domain_url = $protocol . '://' . $short_domain;
+$base_url = $short_domain_url;
 ?>
