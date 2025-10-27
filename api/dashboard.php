@@ -217,7 +217,7 @@ foreach ($daily_clicks_raw as $row) {
             <?php foreach ($links as $link): ?>
                 <div class="bg-card rounded-lg border p-4">
                     <div class="flex items-center space-x-2 mb-2">
-                        <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                        <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                         <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                     </div>
                     <p class="text-muted-foreground text-sm mb-4 truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
@@ -264,7 +264,7 @@ foreach ($daily_clicks_raw as $row) {
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center space-x-2">
-                                    <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                     <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                 </div>
                             </td>
