@@ -374,7 +374,7 @@ ORDER BY day ASC
                         <?php foreach ($links as $link): ?>
                             <div class="bg-card rounded-lg border p-4">
                                 <div class="flex items-center space-x-2 mb-2">
-                                    <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                     <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                 </div>
                                 <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
