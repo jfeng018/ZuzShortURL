@@ -16,7 +16,7 @@ $reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout
 $csrf_token = generate_csrf_token();
 $error = '';
 $success = '';
-$short_url = '';
+$short_link = '';
 $code = '';
 $user_id = is_logged_in() ? get_current_user_id() : null;
 $is_logged_in = is_logged_in();
@@ -63,10 +63,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $enable_str = $enable_intermediate ? 'true' : 'false';
                 $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
-                $short_url = $short_url . '/' . $code;
+                $short_link = $base_url . '/' . $code;
                 $success = '短链接创建成功！';
                 $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
-                $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_url, 'created_at' => time()];
+                $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_link, 'created_at' => time()];
                 $history = array_slice($history, -5);
                 setcookie('short_history', json_encode($history), [
                     'expires' => time() + (30 * 24 * 3600),
@@ -140,9 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($success): ?>
                 <div class="mt-6 bg-secondary/50 border border-secondary/30 rounded-md p-4">
                     <p class="text-sm text-muted-foreground mb-2">您的短链接:</p>
-                    <div class="flex items-center space-x-2">
-                        <input type="text" id="shortUrl" value="<?php echo htmlspecialchars($short_url); ?>" readonly class="flex-1 px-3 py-2 border border-input rounded-md bg-background">
-                        <button onclick="copyToClipboard('shortUrl')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded">复制</button>
+                    <div class="flex items-stretch space-x-2">
+                        <input type="text" id="shortUrl" value="<?php echo htmlspecialchars($short_link); ?>" readonly class="flex-1 px-3 py-2 border border-input rounded-md bg-background min-w-0">
+                        <button onclick="copyToClipboard('shortUrl')" class="px-4 py-2 bg-secondary text-secondary-foreground rounded whitespace-nowrap">复制</button>
                     </div>
                 </div>
             <?php endif; ?>
