@@ -314,22 +314,60 @@ ORDER BY day ASC
             <?php if ($active_tab === 'dashboard'): ?>
                 <section>
                     <h2 class="text-2xl font-bold mb-4">数据看板</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="bg-card rounded-lg border p-6 text-center">
-                            <h3 class="text-lg font-semibold text-muted-foreground">注册用户数</h3>
-                            <p class="text-3xl font-bold"><?php echo $total_users; ?></p>
+                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总用户</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M22 21v-2a4 4 0 00-3-3.87m-3-12a4 4 0 010 7.75"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_users; ?></div>
+                            </div>
                         </div>
-                        <div class="bg-card rounded-lg border p-6 text-center">
-                            <h3 class="text-lg font-semibold text-muted-foreground">总链接量</h3>
-                            <p class="text-3xl font-bold"><?php echo $total_links; ?></p>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总链接</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_links; ?></div>
+                            </div>
                         </div>
-                        <div class="bg-card rounded-lg border p-6 text-center">
-                            <h3 class="text-lg font-semibold text-muted-foreground">总点击量</h3>
-                            <p class="text-3xl font-bold"><?php echo $total_clicks; ?></p>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总点击</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M3.5 13.1c.8 0 1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1h.5m-16 4h17"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_clicks; ?></div>
+                            </div>
                         </div>
-                        <div class="bg-card rounded-lg border p-6 text-center">
-                            <h3 class="text-lg font-semibold text-muted-foreground">点击率</h3>
-                            <p class="text-3xl font-bold"><?php echo $click_rate; ?>%</p>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">点击率</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M2 2v20"></path>
+                                    <path d="M5.5 17h2.25v2.25"></path>
+                                    <path d="M5.5 17h2.25v2.25"></path>
+                                    <path d="M9 11h2.25v2.25"></path>
+                                    <path d="M12.5 5h2.25v2.25"></path>
+                                    <path d="M16 14h2.25v2.25"></path>
+                                    <path d="M19.5 8h2.25v2.25"></path>
+                                    <path d="M2 2h20"></path>
+                                    <path d="M5.5 17l3-6 3 12 4-15 3 9 3-6"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $click_rate; ?>%</div>
+                            </div>
                         </div>
                     </div>
                     <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -420,7 +458,7 @@ ORDER BY day ASC
                                     <tr>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center space-x-2">
-                                                <input type="text" value="<?php echo htmlspecialchars($short_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
                                                 <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
                                             </div>
                                         </td>

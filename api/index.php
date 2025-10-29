@@ -101,7 +101,7 @@ if ($path === '/' || $path === '') {
                     </div>
                 </div>
                 <div class="md:w-1/2">
-                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg mt-4">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg mt-8">
                 </div>
             </section>
 

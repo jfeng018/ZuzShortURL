@@ -10,14 +10,40 @@ require_once __DIR__ . '/functions.php';
         <div class="hidden md:flex items-center space-x-4">
             <?php if (is_logged_in()): ?>
                 <span class="text-muted-foreground py-2">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
-                <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">控制台</a>
-                <a href="/logout" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">登出</a>
+                <!-- 控制台 -->
+                <a href="/dashboard" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1m-6 0h6"></path>
+                    </svg>
+                    控制台
+                </a>
+                <!-- 登出 -->
+                <a href="/logout" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登出
+                </a>
             <?php else: ?>
-                <a href="/login" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">登录</a>
-                <a href="/register" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 rounded-lg">注册</a>
+                <!-- 登录 -->
+                <a href="/login" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登录
+                </a>
+                <!-- 注册 -->
+                <a href="/register" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                    注册
+                </a>
             <?php endif; ?>
-            
-            <!-- 更多选项下拉 -->
+
+            <!-- 更多下拉 -->
             <div class="relative group">
                 <button class="flex items-center space-x-1 px-4 py-2 text-sm font-medium rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 transition-all">
                     <span>更多</span>
@@ -59,7 +85,7 @@ require_once __DIR__ . '/functions.php';
                         </a>
                         <a href="mailto:master@zeapi.ink" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.11 0 2-.9 2-2V6c0-1.11-.89-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
                             </svg>
                             联系我们
                         </a>
@@ -68,14 +94,36 @@ require_once __DIR__ . '/functions.php';
             </div>
         </div>
 
+        <!-- 移动端右侧按钮组 -->
         <div class="md:hidden flex items-center space-x-2">
             <?php if (!is_logged_in()): ?>
-                <a href="/login" class="px-3 py-1.5 text-sm border border-black bg-black text-white rounded-lg">登录</a>
-                <a href="/register" class="px-3 py-1.5 text-sm border border-neutral-200 bg-white text-neutral-500 rounded-lg">注册</a>
+                <!-- 登录 -->
+                <a href="/login" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登录
+                </a>
+                <!-- 注册 -->
+                <a href="/register" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                    注册
+                </a>
             <?php else: ?>
-                <a href="/dashboard" class="px-3 py-1.5 text-sm border border-black bg-black text-white rounded-lg">控制台</a>
+                <!-- 控制台 -->
+                <a href="/dashboard" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1m-6 0h6"></path>
+                    </svg>
+                    控制台
+                </a>
             <?php endif; ?>
-            
+
+            <!-- 汉堡 -->
             <button onclick="toggleMobileMenu()" class="p-2 rounded-lg border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 transition-all">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -84,39 +132,41 @@ require_once __DIR__ . '/functions.php';
         </div>
     </div>
 
+    <!-- 手机下拉 -->
     <div id="mobileDropdown" class="fixed top-full left-0 w-full z-50 hidden md:hidden bg-white shadow-lg border-t border-gray-200 transform transition-all duration-300 ease-out origin-top">
         <div class="absolute inset-0 bg-black bg-opacity-25" onclick="toggleMobileMenu()"></div>
-        
         <div class="relative px-4 py-4 space-y-2 max-h-[calc(100vh-4rem)] overflow-y-auto opacity-0 scale-y-95">
             <?php if (is_logged_in()): ?>
                 <div class="text-sm text-muted-foreground mb-4 text-center">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></div>
                 <a href="/dashboard" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
-                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
                         <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
                     </svg>
                     <span class="flex-1 text-left">控制台</span>
                 </a>
                 <a href="/logout" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
-                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"></path>
                     </svg>
                     <span class="flex-1 text-left">登出</span>
                 </a>
             <?php else: ?>
                 <a href="/login" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
-                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h8v14z"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
                     </svg>
                     <span class="flex-1 text-left">登录</span>
                 </a>
                 <a href="/register" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
-                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
                     </svg>
                     <span class="flex-1 text-left">注册</span>
                 </a>
             <?php endif; ?>
-            
+
             <div class="border-t pt-4 mt-4 space-y-2">
                 <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
                     <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -163,7 +213,7 @@ require_once __DIR__ . '/functions.php';
     function toggleMobileMenu() {
         const dropdown = document.getElementById('mobileDropdown');
         const content = dropdown.querySelector('div.relative.px-4.py-4');
-        
+
         if (dropdown.classList.contains('hidden')) {
             dropdown.classList.remove('hidden');
             setTimeout(() => {

@@ -298,20 +298,49 @@ foreach ($daily_clicks_raw as $row) {
                 </tbody>
             </table>
         </div>
-        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-card rounded-lg border p-6 text-center">
-                <h3 class="text-lg font-semibold text-muted-foreground">总链接数</h3>
-                <p class="text-3xl font-bold"><?php echo $total_links; ?></p>
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-8">
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">总链接</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $total_links; ?></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">总点击</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M3.5 13.1c.8 0 1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1h.5m-16 4h17"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $total_clicks; ?></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">平均点击</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M2 2v20"></path>
+                            <path d="M5.5 17h2.25v2.25"></path>
+                            <path d="M5.5 17h2.25v2.25"></path>
+                            <path d="M9 11h2.25v2.25"></path>
+                            <path d="M12.5 5h2.25v2.25"></path>
+                            <path d="M16 14h2.25v2.25"></path>
+                            <path d="M19.5 8h2.25v2.25"></path>
+                            <path d="M2 2h20"></path>
+                            <path d="M5.5 17l3-6 3 12 4-15 3 9 3-6"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $avg_click_rate; ?></div>
+                    </div>
+                </div>
             </div>
-            <div class="bg-card rounded-lg border p-6 text-center">
-                <h3 class="text-lg font-semibold text-muted-foreground">总点击量</h3>
-                <p class="text-3xl font-bold"><?php echo $total_clicks; ?></p>
-            </div>
-            <div class="bg-card rounded-lg border p-6 text-center">
-                <h3 class="text-lg font-semibold text-muted-foreground">平均点击率</h3>
-                <p class="text-3xl font-bold"><?php echo $avg_click_rate; ?></p>
-            </div>
-        </div>
         <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="bg-card rounded-lg border p-6">
                 <h3 class="text-lg font-semibold mb-4">每日点击趋势 (折线图, 过去30天)</h3>
