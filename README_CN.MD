@@ -15,7 +15,7 @@ Demo站后台地址：https://zuz.asia/admin
 Demo站后台token：admintoken  
 Demo站会定时清空数据，请勿长期使用，需要短链接服务请访问官网
 
-![ZuzShortURL 双端预览截图](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/682ef55dd97a397c.jpg)
+![ZuzShortURL UI预览截图](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/46cc19f8046633fa.png)
 
 > *Release仅用于版本发布，使用时请Fork本仓库或点击一键部署。*  
 > *由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理~~退出上线~~。* [^1]  
