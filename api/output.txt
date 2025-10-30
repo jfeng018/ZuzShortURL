@@ -1,0 +1,3409 @@
+includes/config.php
+<?php
+if (defined('CONFIG_PHP_INCLUDED')) {
+    return;
+}
+define('CONFIG_PHP_INCLUDED', true);
+
+ob_start('ob_gzhandler');
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use Chillerlan\QRCode\QRCode;
+use Chillerlan\QRCode\QROptions;
+
+class DatabaseSessionHandler implements SessionHandlerInterface {
+    private $pdo;
+    private $lifetime;
+
+    public function __construct(PDO $pdo, int $lifetime = 1440) {
+        $this->pdo = $pdo;
+        $this->lifetime = $lifetime;
+    }
+
+    public function open($savePath, $sessionName): bool {
+        return true;
+    }
+
+    public function close(): bool {
+        return true;
+    }
+
+    public function read($id): string {
+        $stmt = $this->pdo->prepare("SELECT sess_data FROM sessions WHERE sess_id = ? AND sess_lifetime > EXTRACT(EPOCH FROM (NOW() - sess_time))");
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ? $row['sess_data'] : '';
+    }
+
+    public function write($id, $data): bool {
+        $stmt = $this->pdo->prepare("INSERT INTO sessions (sess_id, sess_data, sess_lifetime, sess_time) VALUES (?, ?, ?, NOW()) 
+                                     ON CONFLICT (sess_id) DO UPDATE SET sess_data = EXCLUDED.sess_data, sess_lifetime = EXCLUDED.sess_lifetime, sess_time = NOW()");
+        return $stmt->execute([$id, $data, $this->lifetime]);
+    }
+
+    public function destroy($id): bool {
+        $stmt = $this->pdo->prepare("DELETE FROM sessions WHERE sess_id = ?");
+        $stmt->execute([$id]);
+        return true;
+    }
+
+    public function gc($maxlifetime): int|false {
+        $stmt = $this->pdo->prepare("DELETE FROM sessions WHERE sess_lifetime < EXTRACT(EPOCH FROM (NOW() - sess_time))");
+        $stmt->execute();
+        return $stmt->rowCount();
+    }
+}
+
+$db_url_str = getenv('DATABASE_URL') ?: '';
+if (empty($db_url_str)) {
+    http_response_code(500);
+    die('DATABASE_URL 环境变量未设置');
+}
+$db_url = parse_url($db_url_str);
+if (!$db_url || empty($db_url['host']) || empty($db_url['path'])) {
+    http_response_code(500);
+    die('DATABASE_URL 环境变量无效');
+}
+$host = $db_url['host'];
+$port = $db_url['port'] ?? 5432;
+$dbname = ltrim($db_url['path'], '/');
+$user = $db_url['user'] ?? '';
+$pass = $db_url['pass'] ?? '';
+$admin_token = getenv('ADMIN_TOKEN') ?: '';
+
+try {
+    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass, [PDO::ATTR_PERSISTENT => true]);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    http_response_code(500);
+    die('数据库连接失败: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+}
+
+$handler = new DatabaseSessionHandler($pdo);
+session_set_save_handler($handler, true);
+
+ini_set('session.gc_probability', 1);
+ini_set('session.gc_divisor', 1000);
+
+session_start();
+
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+
+$settings_stmt = $pdo->query("SELECT \"key\", value FROM settings");
+$settings = [];
+while ($row = $settings_stmt->fetch(PDO::FETCH_ASSOC)) {
+    $settings[$row['key']] = $row['value'];
+}
+
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard', 'migrate'];
+
+$current_domain = $_SERVER['HTTP_HOST'];
+$official_domain = $settings['official_domain'] ?? $current_domain;
+$enable_dual_domain = ($settings['enable_dual_domain'] ?? 'false') === 'true';
+$short_domain = $enable_dual_domain ? ($settings['short_domain'] ?? $current_domain) : $official_domain;
+
+$protocol = 'http';
+if (isset($_SERVER['HTTP_IN_DOCKER_HTTPS']) && $_SERVER['HTTP_IN_DOCKER_HTTPS'] === 'true') {
+    $protocol = 'https';
+} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    $protocol = 'https';
+}
+
+$official_url = $protocol . '://' . $official_domain;
+$short_domain_url = $protocol . '://' . $short_domain;
+$base_url = $short_domain_url;
+?>
+includes/footer.php
+<footer class="py-6 md:px-8 md:py-0">
+  <div class="container
+              flex flex-col items-center justify-between gap-2   <!-- gap 改小 -->
+              md:h-24 md:flex-row">
+    <p class="text-center text-sm text-muted-foreground
+              leading-normal md:text-left">
+      <span>© 2025 ZeinkLab. All rights reserved. | 
+        <a href="https://zeinklab.com" target="_blank"
+           class="font-medium underline underline-offset-4">ZeinkLab</a>
+      </span>
+        <br/>
+      <span>
+        Built by
+        <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" rel="noreferrer"
+           class="font-medium underline underline-offset-4">JanePHPDev</a>.
+        Source on
+        <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" rel="noreferrer"
+           class="font-medium underline underline-offset-4">GitHub</a>.
+      </span>
+    </p>
+  </div>
+</footer>
+includes/functions.php
+<?php
+require_once __DIR__ . '/config.php';
+
+function generate_csrf_token() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function validate_csrf_token($token) {
+    return hash_equals($_SESSION['csrf_token'] ?? '', $token);
+}
+
+function validate_captcha($token, $pdo) {
+    global $settings;
+    $turnstile_enabled = $settings['turnstile_enabled'] ?? 'false' === 'true';
+    if (!$turnstile_enabled) {
+        return true;
+    }
+    $cf_secret_key = $settings['turnstile_secret_key'] ?? '';
+    if (empty($cf_secret_key)) {
+        return false;
+    }
+    $url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    $data = [
+        'secret' => $cf_secret_key,
+        'response' => $token,
+        'remoteip' => $_SERVER['REMOTE_ADDR'] ?? ''
+    ];
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        error_log('CAPTCHA 验证 cURL 错误: ' . curl_error($ch));
+        curl_close($ch);
+        return false;
+    }
+    curl_close($ch);
+    $result = json_decode($response, true);
+    return $result['success'] ?? false;
+}
+
+function check_rate_limit($pdo) {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $max_requests = 120;
+    $window_seconds = 60;
+
+    $stmt = $pdo->prepare("
+        SELECT request_count, window_start 
+        FROM rate_limits 
+        WHERE ip = ?
+    ");
+    $stmt->execute([$ip]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $recent = false;
+    if ($row) {
+        $window_start = strtotime($row['window_start']);
+        if (time() - $window_start < $window_seconds) {
+            $recent = true;
+            if ((int)$row['request_count'] >= $max_requests) {
+                http_response_code(429);
+                die('请求过于频繁，请稍后重试。');
+            }
+        }
+    }
+
+    if ($row) {
+        if ($recent) {
+            $update_stmt = $pdo->prepare("UPDATE rate_limits SET request_count = request_count + 1 WHERE ip = ?");
+            $update_stmt->execute([$ip]);
+        } else {
+            $update_stmt = $pdo->prepare("UPDATE rate_limits SET request_count = 1, window_start = NOW() WHERE ip = ?");
+            $update_stmt->execute([$ip]);
+        }
+    } else {
+        $insert_stmt = $pdo->prepare("INSERT INTO rate_limits (ip, request_count, window_start) VALUES (?, 1, NOW())");
+        $insert_stmt->execute([$ip]);
+    }
+}
+
+function generate_random_code($pdo, $reserved_codes) {
+    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890';
+    $max_attempts = 100;
+    $attempts = 0;
+    do {
+        $code = substr(str_shuffle($chars), 0, 5);
+        if (in_array(strtolower($code), $reserved_codes)) continue;
+        $stmt = $pdo->prepare("SELECT id FROM short_links WHERE shortcode = ?");
+        $stmt->execute([$code]);
+        $attempts++;
+    } while ($stmt->fetch() && $attempts < $max_attempts);
+    if ($attempts >= $max_attempts) {
+        throw new Exception('无法生成唯一短码');
+    }
+    return $code;
+}
+
+function validate_custom_code($code, $pdo, $reserved_codes) {
+    if (strlen($code) < 5 || strlen($code) > 10) return '短码长度为5-10位';
+    if (!preg_match('/^[A-Za-z0-9]+$/', $code)) return '短码仅限字母数字';
+    if (in_array(strtolower($code), $reserved_codes)) return '短码被保留';
+    $stmt = $pdo->prepare("SELECT id FROM short_links WHERE shortcode = ?");
+    $stmt->execute([$code]);
+    if ($stmt->fetch()) return '短码已存在';
+    return true;
+}
+
+function is_logged_in() {
+    return isset($_SESSION['user_id']);
+}
+
+function get_current_user_id() {
+    return $_SESSION['user_id'] ?? null;
+}
+
+function require_admin_auth() {
+    global $admin_token;
+    if (!isset($_SESSION['admin_auth']) || !hash_equals($_SESSION['admin_auth'], hash_hmac('sha256', $admin_token, session_id()))) {
+        return false;
+    }
+    return true;
+}
+
+function get_setting($pdo, $key) {
+    global $settings;
+    return $settings[$key] ?? ($key === 'allow_guest' || $key === 'enable_dual_domain' ? 'false' : 'true');
+}
+
+function set_setting(PDO $pdo, string $key, $value): void
+{
+    global $settings;
+
+    $boolKeys = [
+        'turnstile_enabled',
+        'allow_guest',
+        'enable_dual_domain',
+        'enable_registration',
+        'enable_analytics',
+        'show_recent_links',
+        'enable_advertising',
+        'maintenance_mode'
+    ];
+
+    if (in_array($key, $boolKeys, true)) {
+        $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        // 修复：转换为字符串，避免 PDO 布尔绑定 bug
+        $value = $value ? 'true' : 'false';
+    }
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO settings ("key", value)
+         VALUES (?, ?)
+         ON CONFLICT ("key") DO UPDATE SET value = ?'
+    );
+    $stmt->execute([$key, $value, $value]);
+
+    $settings[$key] = $value;
+}
+
+function logout() {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    session_destroy();
+    global $pdo;
+    $handler = new DatabaseSessionHandler($pdo);
+    $handler->destroy(session_id());
+}
+
+?>
+includes/header.php
+<?php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
+?>
+<nav class="header-card border-b border-border px-4 py-2 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
+    <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-bold"><?php echo htmlspecialchars(get_setting($pdo, 'header_title')); ?></h1>
+
+        <!-- 桌面菜单 -->
+        <div class="hidden md:flex items-center space-x-4">
+            <?php if (is_logged_in()): ?>
+                <span class="text-muted-foreground py-2">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+                <!-- 控制台 -->
+                <a href="/dashboard" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1m-6 0h6"></path>
+                    </svg>
+                    控制台
+                </a>
+                <!-- 登出 -->
+                <a href="/logout" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登出
+                </a>
+            <?php else: ?>
+                <!-- 登录 -->
+                <a href="/login" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登录
+                </a>
+                <!-- 注册 -->
+                <a href="/register" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                    注册
+                </a>
+            <?php endif; ?>
+
+            <!-- 更多下拉 -->
+            <div class="relative group">
+                <button class="flex items-center space-x-1 px-4 py-2 text-sm font-medium rounded-lg border border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 transition-all">
+                    <span>更多</span>
+                    <svg class="w-4 h-4 transition-transform group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform group-hover:translate-y-0 translate-y-2">
+                    <div class="py-2">
+                        <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                            GitHub
+                        </a>
+                        <a href="https://qm.qq.com/q/UgE1QY47y6" target="_blank" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                            </svg>
+                            QQ群
+                        </a>
+                        <a href="https://linux.do/t/topic/1050443" target="_blank" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                            </svg>
+                            Linux.do
+                        </a>
+                        <a href="https://zuz.asia/" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                            Demo网站
+                        </a>
+                        <a href="/api/docs" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                            </svg>
+                            API文档
+                        </a>
+                        <a href="mailto:master@zeapi.ink" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <svg class="w-4 h-4 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.11 0 2-.9 2-2V6c0-1.11-.89-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                            </svg>
+                            联系我们
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 移动端右侧按钮组 -->
+        <div class="md:hidden flex items-center space-x-2">
+            <?php if (!is_logged_in()): ?>
+                <!-- 登录 -->
+                <a href="/login" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    登录
+                </a>
+                <!-- 注册 -->
+                <a href="/register" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                    注册
+                </a>
+            <?php else: ?>
+                <!-- 控制台 -->
+                <a href="/dashboard" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:text-primary-foreground h-9 px-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4">
+                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1m-6 0h6"></path>
+                    </svg>
+                    控制台
+                </a>
+            <?php endif; ?>
+
+            <!-- 汉堡 -->
+            <button onclick="toggleMobileMenu()" class="p-2 rounded-lg border border-neutral-200 bg-white text-neutral-500 hover:border-neutral-400 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- 手机下拉 -->
+    <div id="mobileDropdown" class="fixed top-full left-0 w-full z-50 hidden md:hidden bg-white shadow-lg border-t border-gray-200 transform transition-all duration-300 ease-out origin-top">
+        <div class="absolute inset-0 bg-black bg-opacity-25" onclick="toggleMobileMenu()"></div>
+        <div class="relative px-4 py-4 space-y-2 max-h-[calc(100vh-4rem)] overflow-y-auto opacity-0 scale-y-95">
+            <?php if (is_logged_in()): ?>
+                <div class="text-sm text-muted-foreground mb-4 text-center">欢迎，<?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></div>
+                <a href="/dashboard" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                    </svg>
+                    <span class="flex-1 text-left">控制台</span>
+                </a>
+                <a href="/logout" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"></path>
+                    </svg>
+                    <span class="flex-1 text-left">登出</span>
+                </a>
+            <?php else: ?>
+                <a href="/login" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-9.75 0L5.25 13.5m0 0L3 15.75m-.75-3.75h3m-3 0V9m12 3l-3-3m0 0l3 3m-3-3V21"></path>
+                    </svg>
+                    <span class="flex-1 text-left">登录</span>
+                </a>
+                <a href="/register" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 h-5 w-5 flex-shrink-0">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <path d="M20 8v6M23 11h-6"></path>
+                    </svg>
+                    <span class="flex-1 text-left">注册</span>
+                </a>
+            <?php endif; ?>
+
+            <div class="border-t pt-4 mt-4 space-y-2">
+                <a href="https://github.com/JanePHPDev/ZuzShortURL" target="_blank" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="flex-1 text-left">GitHub</span>
+                </a>
+                <a href="https://qm.qq.com/q/UgE1QY47y6" target="_blank" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                    </svg>
+                    <span class="flex-1 text-left">QQ群</span>
+                </a>
+                <a href="https://linux.do/t/topic/1050443" target="_blank" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                    </svg>
+                    <span class="flex-1 text-left">Linux.do</span>
+                </a>
+                <a href="https://zuz.asia/" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <span class="flex-1 text-left">Demo网站</span>
+                </a>
+                <a href="/api/docs" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                    </svg>
+                    <span class="flex-1 text-left">API文档</span>
+                </a>
+                <a href="mailto:master@zeapi.ink" class="flex items-center justify-center px-4 py-3 text-sm rounded-lg hover:bg-gray-100" onclick="toggleMobileMenu()">
+                    <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                    </svg>
+                    <span class="flex-1 text-left">联系我们</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<script>
+    function toggleMobileMenu() {
+        const dropdown = document.getElementById('mobileDropdown');
+        const content = dropdown.querySelector('div.relative.px-4.py-4');
+
+        if (dropdown.classList.contains('hidden')) {
+            dropdown.classList.remove('hidden');
+            setTimeout(() => {
+                dropdown.classList.add('!opacity-100', '!scale-y-100');
+                content.classList.remove('opacity-0', 'scale-y-95');
+            }, 10);
+        } else {
+            content.classList.add('opacity-0', 'scale-y-95');
+            setTimeout(() => {
+                dropdown.classList.add('hidden');
+                dropdown.classList.remove('!opacity-100', '!scale-y-100');
+            }, 300);
+        }
+    }
+</script>
+
+includes/script.js
+tailwind.config = {
+    theme: {
+        extend: {
+            colors: {
+                border: "hsl(var(--border))",
+                input: "hsl(var(--input))",
+                ring: "hsl(var(--ring))",
+                background: "hsl(var(--background))",
+                foreground: "hsl(var(--foreground))",
+                primary: {
+                    DEFAULT: "hsl(var(--primary))",
+                    foreground: "hsl(var(--primary-foreground))",
+                },
+                secondary: {
+                    DEFAULT: "hsl(var(--secondary))",
+                    foreground: "hsl(var(--secondary-foreground))",
+                },
+                destructive: {
+                    DEFAULT: "hsl(var(--destructive))",
+                    foreground: "hsl(var(--destructive-foreground))",
+                },
+                muted: {
+                    DEFAULT: "hsl(var(--muted))",
+                    foreground: "hsl(var(--muted-foreground))",
+                },
+                accent: {
+                    DEFAULT: "hsl(var(--accent))",
+                    foreground: "hsl(var(--accent-foreground))",
+                },
+                popover: {
+                    DEFAULT: "hsl(var(--popover))",
+                    foreground: "hsl(var(--popover-foreground))",
+                },
+                card: {
+                    DEFAULT: "hsl(var(--card))",
+                    foreground: "hsl(var(--card-foreground))",
+                },
+            },
+            borderRadius: {
+                lg: "var(--radius)",
+                md: "calc(var(--radius) - 2px)",
+                sm: "calc(var(--radius) - 4px)",
+            },
+        },
+    }
+}
+includes/styles.css
+:root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+}
+
+.dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+}
+
+body {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    background-color: hsl(var(--background));
+    background-image: 
+        repeating-linear-gradient(90deg, transparent, transparent 19px, hsl(var(--muted-foreground)/0.1) 20px, hsl(var(--muted-foreground)/0.1) 21px),
+        repeating-linear-gradient(0deg, transparent, transparent 19px, hsl(var(--muted-foreground)/0.1) 20px, hsl(var(--muted-foreground)/0.1) 21px);
+    background-size: 20px 20px;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: inherit;
+    z-index: -1;
+    backdrop-filter: blur(1px);
+    pointer-events: none;
+}
+
+.bg-card {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.8);
+    border: 1px solid hsl(var(--border)/0.5);
+    border-radius: var(--radius);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.header-card {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.8);
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.dark .bg-card {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.6);
+    border: 1px solid hsl(var(--border)/0.5);
+}
+
+.container {
+    position: relative;
+    z-index: 1;
+}
+
+.pricing-card {
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+.hero-section {
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+.mobile-menu {
+    display: none;
+    z-index: 50;
+}
+
+@media (max-width: 768px) {
+    .desktop-menu {
+        display: none;
+    }
+    .mobile-menu {
+        display: block;
+    }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 18px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 18px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:checked + .slider:before {
+    transform: translateX(18px);
+}
+
+.pricing-card.popular {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--card)/0.8);
+    background: linear-gradient(135deg, hsl(var(--card)/0.9), hsl(var(--primary)/0.05));
+}
+
+.pricing-card.popular::before {
+    content: '推荐';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: hsl(var(--primary));
+    color: white;
+    padding: 3px 12px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    z-index: 1;
+}
+
+button {
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+}
+
+button:hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px hsl(var(--ring)/0.1);
+}
+
+input:focus, textarea:focus {
+    outline: none;
+    ring: 2px solid hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsl(var(--primary)/0.2);
+    transition: box-shadow 0.2s ease;
+}
+
+.cf-turnstile {
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.cf-turnstile:hover {
+    transform: scale(1.02);
+}
+
+/* 提示框添加模糊 */
+.bg-destructive\/10, .bg-secondary\/50 {
+    backdrop-filter: blur(4px);
+    transition: opacity 0.3s ease;
+}
+
+/* 模态动画 */
+.fixed.inset-0 {
+    transition: opacity 0.3s ease;
+}
+
+api.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API文档 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+        <script src="../includes/script.js"></script>
+    <link rel="stylesheet" href="../includes/styles.css">
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <?php include 'includes/header.php'; ?>
+    <main class="container mx-auto p-4 pt-20">
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-bold inline-flex items-center">
+                <svg class="h-8 w-8 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l-4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                API 文档
+            </h2>
+        </div>
+        <div class="bg-card rounded-lg border p-4 mb-6">
+            <h3 class="text-xl font-bold mb-3 inline-flex items-center">
+                <svg class="h-5 w-5 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.657l-2.122 2.122M6.364 17.364l2.121 2.121m9.9-9.9l2.121-2.122" />
+                </svg>
+                创建短链接 POST /api/create
+            </h3>
+            <p class="text-muted-foreground mb-3">Headers: Content-Type: application/json</p>
+            <pre class="bg-muted rounded-md p-3 overflow-x-auto text-sm"><code>{
+  "url": "https://example.com",
+  "custom_code": "abcde",
+  "enable_intermediate": true,
+  "expiration": "2025-12-31"
+}</code></pre>
+            <p class="text-muted-foreground mb-3 mt-3">Response:</p>
+            <pre class="bg-muted rounded-md p-3 overflow-x-auto text-sm"><code>{
+  "success": true,
+  "short_url": "https://zuz.asia/abcde"
+}</code></pre>
+            <p class="text-sm text-destructive mt-3">注: 速率限制120次/分钟，无API密钥（开源）。</p>
+        </div>
+        <div class="text-center">
+            <a href="/" class="inline-flex items-center px-3 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm">
+                <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1m-6 0h6" />
+                </svg>
+                返回首页
+            </a>
+        </div>
+    </main>
+    <?php include 'includes/footer.php'; ?>
+</body>
+</html>
+admin.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$csrf_token = generate_csrf_token();
+$error = '';
+$success = '';
+$links = [];
+$users = [];
+$show_list = false;
+$input_token = $_POST['token'] ?? '';
+$valid_token = hash_equals($admin_token, $input_token);
+$active_tab = $_GET['tab'] ?? 'dashboard';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRF令牌无效。';
+    } elseif (!$valid_token && !require_admin_auth()) {
+        $error = '无效的管理令牌。';
+    } else {
+        $action = $_POST['action'] ?? '';
+        switch ($action) {
+            case 'login':
+                if ($valid_token) {
+                    $_SESSION['admin_auth'] = hash_hmac('sha256', $admin_token, session_id());
+                    $show_list = true;
+                }
+                break;
+            case 'add':
+                if (!require_admin_auth()) break;
+                $longurl = trim($_POST['url'] ?? '');
+                $custom_code = trim($_POST['custom_code'] ?? '');
+                $enable_intermediate = isset($_POST['enable_intermediate']) ? true : false;
+                $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+                $link_password = trim($_POST['link_password'] ?? '');
+                $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
+                $expiration = $_POST['expiration'] ?? null;
+                $user_id = $_POST['user_id'] ?? null;
+                if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
+                    $error = '无效的URL。';
+                } else {
+                    $code = '';
+                    if (!empty($custom_code)) {
+                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+                        if ($validate === true) {
+                            $code = $custom_code;
+                        } else {
+                            $error = $validate;
+                        }
+                    }
+                    if (empty($code)) {
+                        try {
+                            $code = generate_random_code($pdo, $reserved_codes);
+                        } catch (Exception $e) {
+                            $error = '生成短码失败。';
+                        }
+                    }
+                    if (empty($error)) {
+                        $enable_str = $enable_intermediate ? 'true' : 'false';
+                        $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([$code, $longurl, $user_id ?: null, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
+                        $success = '链接添加成功。';
+                    }
+                }
+                break;
+            case 'edit':
+                if (!require_admin_auth()) break;
+                $code = $_POST['code'] ?? '';
+                $newurl = trim($_POST['newurl'] ?? '');
+                $enable_intermediate = isset($_POST['enable_intermediate']) ? true : false;
+                $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+                $link_password = trim($_POST['link_password'] ?? '');
+                $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
+                $expiration = $_POST['expiration'] ?? null;
+                $user_id = $_POST['user_id'] ?? null;
+                if (!filter_var($newurl, FILTER_VALIDATE_URL)) {
+                    $error = '无效的新URL。';
+                } else {
+                    $enable_str = $enable_intermediate ? 'true' : 'false';
+                    $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ?, user_id = ? WHERE shortcode = ?");
+                    $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $user_id ?: null, $code]);
+                    $success = '链接更新成功。';
+                }
+                break;
+            case 'delete_link':
+                if (!require_admin_auth()) break;
+                $code = $_POST['code'] ?? '';
+                $stmt = $pdo->prepare("DELETE FROM short_links WHERE shortcode = ?");
+                $stmt->execute([$code]);
+                $success = '链接删除成功。';
+                break;
+            case 'delete_user':
+                if (!require_admin_auth()) break;
+                $user_id = $_POST['user_id'] ?? '';
+                $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+                $stmt->execute([$user_id]);
+                $stmt = $pdo->prepare("DELETE FROM short_links WHERE user_id = ?");
+                $stmt->execute([$user_id]);
+                $success = '用户删除成功。';
+                break;
+            case 'settings':
+                if (!require_admin_auth()) break;
+                $private_mode = isset($_POST['private_mode']) ? 'true' : 'false';
+                $allow_guest = isset($_POST['allow_guest']) ? 'true' : 'false';
+                $allow_register = isset($_POST['allow_register']) ? 'true' : 'false';
+                $turnstile_enabled = isset($_POST['turnstile_enabled']) ? 'true' : 'false';
+                $enable_dual_domain = isset($_POST['enable_dual_domain']) ? 'true' : 'false';
+                $turnstile_site_key = trim($_POST['turnstile_site_key'] ?? '');
+                $turnstile_secret_key = trim($_POST['turnstile_secret_key'] ?? '');
+                $official_domain = trim($_POST['official_domain'] ?? '');
+                $short_domain = trim($_POST['short_domain'] ?? '');
+                $site_title = trim($_POST['site_title'] ?? '');
+                $header_title = trim($_POST['header_title'] ?? '');
+                $home_description = trim($_POST['home_description'] ?? '');
+                $home_image_url = trim($_POST['home_image_url'] ?? '');
+                $intermediate_logo_url = trim($_POST['intermediate_logo_url'] ?? '');
+                $intermediate_text = trim($_POST['intermediate_text'] ?? '');
+                set_setting($pdo, 'private_mode', $private_mode);
+                set_setting($pdo, 'allow_guest', $allow_guest);
+                set_setting($pdo, 'allow_register', $allow_register);
+                set_setting($pdo, 'turnstile_enabled', $turnstile_enabled);
+                set_setting($pdo, 'enable_dual_domain', $enable_dual_domain);
+                set_setting($pdo, 'turnstile_site_key', $turnstile_site_key);
+                set_setting($pdo, 'turnstile_secret_key', $turnstile_secret_key);
+                set_setting($pdo, 'official_domain', $official_domain);
+                set_setting($pdo, 'short_domain', $short_domain);
+                set_setting($pdo, 'site_title', $site_title);
+                set_setting($pdo, 'header_title', $header_title);
+                set_setting($pdo, 'home_description', $home_description);
+                set_setting($pdo, 'home_image_url', $home_image_url);
+                set_setting($pdo, 'intermediate_logo_url', $intermediate_logo_url);
+                set_setting($pdo, 'intermediate_text', $intermediate_text);
+                $success = '设置更新成功。';
+                break;
+            case 'logout':
+                unset($_SESSION['admin_auth']);
+                $show_list = false;
+                $success = '已登出。';
+                break;
+            case 'delete_expired':
+                if (!require_admin_auth()) break;
+                $stmt = $pdo->prepare("DELETE FROM short_links WHERE expiration_date < NOW()");
+                $stmt->execute();
+                $success = '已过期链接删除成功。';
+                break;
+        }
+    }
+}
+
+$show_list = require_admin_auth();
+
+if ($show_list) {
+    $stmt = $pdo->query("SELECT * FROM short_links ORDER BY created_at DESC");
+    $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->query("SELECT * FROM users ORDER BY created_at DESC");
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $total_users = count($users);
+    $total_links = $pdo->query("SELECT COUNT(*) as count FROM short_links")->fetch()['count'];
+    $total_clicks = $pdo->query("SELECT SUM(clicks) as sum FROM short_links")->fetch()['sum'] ?? 0;
+    $click_rate = $total_links > 0 ? round(($total_clicks / $total_links) * 100, 2) : 0;
+
+    $sources = $pdo->query("
+SELECT 
+  CASE 
+    WHEN referrer IS NULL OR referrer = '' THEN 'Direct'
+    ELSE regexp_replace(referrer, '^(https?://)?([^/]+).*', '\\2')
+  END AS domain,
+  COUNT(*) as count 
+FROM click_logs 
+GROUP BY domain 
+ORDER BY count DESC
+LIMIT 10
+")->fetchAll(PDO::FETCH_ASSOC);
+
+    $top_links = $pdo->query("SELECT shortcode, clicks FROM short_links ORDER BY clicks DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+
+    $daily_clicks_raw = $pdo->query("
+SELECT date(clicked_at) as day, COUNT(*) as count 
+FROM click_logs 
+WHERE clicked_at >= NOW() - INTERVAL '30 days'
+GROUP BY day 
+ORDER BY day ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+    $daily_clicks = [];
+    for ($i = 29; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $daily_clicks[$date] = 0;
+    }
+    foreach ($daily_clicks_raw as $row) {
+        $daily_clicks[$row['day']] = (int)$row['count'];
+    }
+
+    $reg_raw = $pdo->query("SELECT date(created_at) as day, COUNT(*) as count FROM users WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY day ORDER BY day ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $registrations = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $registrations[$date] = 0;
+    }
+    foreach ($reg_raw as $row) {
+        $registrations[$row['day']] = (int)$row['count'];
+    }
+
+    $new_links_raw = $pdo->query("SELECT date(created_at) as day, COUNT(*) as count FROM short_links WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY day ORDER BY day ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $new_links = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $new_links[$date] = 0;
+    }
+    foreach ($new_links_raw as $row) {
+        $new_links[$row['day']] = (int)$row['count'];
+    }
+
+    $last7_reg = $pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '7 days' AND created_at < NOW()")->fetchColumn();
+    $prev7_reg = $pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'")->fetchColumn();
+    if ($prev7_reg > 0) {
+        $growth_reg = round(($last7_reg - $prev7_reg) / $prev7_reg * 100, 2) . '%';
+    } else {
+        $growth_reg = $last7_reg > 0 ? 'New' : '0%';
+    }
+
+    $last7_links = $pdo->query("SELECT COUNT(*) FROM short_links WHERE created_at >= NOW() - INTERVAL '7 days' AND created_at < NOW()")->fetchColumn();
+    $prev7_links = $pdo->query("SELECT COUNT(*) FROM short_links WHERE created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'")->fetchColumn();
+    if ($prev7_links > 0) {
+        $growth_links = round(($last7_links - $prev7_links) / $prev7_links * 100, 2) . '%';
+    } else {
+        $growth_links = $last7_links > 0 ? 'New' : '0%';
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理面板 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="includes/script.js"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+    <script src="https://cdn.mengze.vip/npm/chart.js"></script>
+    <style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <nav class="bg-card border-b border-border px-4 py-4 fixed top-0 w-full z-40 backdrop-filter backdrop-blur-md transition-all duration-300">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">Zuz.Asia - 管理面板</h1>
+            <button onclick="toggleMobileMenu()" class="md:hidden px-4 py-2 bg-primary text-primary-foreground rounded-md">菜单</button>
+            <div class="hidden md:flex space-x-4 desktop-menu">
+                <a href="?tab=dashboard" class="px-4 py-2 rounded-md <?php echo $active_tab === 'dashboard' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">数据看板</a>
+                <a href="?tab=links" class="px-4 py-2 rounded-md <?php echo $active_tab === 'links' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">链接管理</a>
+                <a href="?tab=users" class="px-4 py-2 rounded-md <?php echo $active_tab === 'users' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">用户管理</a>
+                <a href="?tab=settings" class="px-4 py-2 rounded-md <?php echo $active_tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">系统设置</a>
+                <form method="post" class="inline">
+                    <input type="hidden" name="action" value="logout">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</button>
+                </form>
+            </div>
+            <div id="mobileMenu" class="hidden absolute top-16 right-4 md:hidden bg-card rounded-lg border p-4 space-y-2 mobile-menu">
+                <a href="?tab=dashboard" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'dashboard' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">数据看板</a>
+                <a href="?tab=links" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'links' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">链接管理</a>
+                <a href="?tab=users" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'users' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">用户管理</a>
+                <a href="?tab=settings" class="block px-4 py-2 rounded-md <?php echo $active_tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-secondary'; ?>">系统设置</a>
+                <form method="post" class="block">
+                    <input type="hidden" name="action" value="logout">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <button type="submit" class="w-full px-4 py-2 bg-destructive text-destructive-foreground rounded-md">登出</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+    <main class="container mx-auto p-4 pt-20">
+        <?php if ($error): ?>
+            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4 backdrop-filter backdrop-blur-sm transition-all duration-300"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4 backdrop-filter backdrop-blur-sm transition-all duration-300"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        <?php if (!$show_list): ?>
+            <div class="max-w-md mx-auto">
+                <div class="bg-card rounded-lg border p-6">
+                    <h2 class="text-xl font-semibold mb-4">输入管理令牌</h2>
+                    <form method="post">
+                        <input type="hidden" name="action" value="login">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="mb-4">
+                            <input type="password" name="token" class="w-full px-3 py-2 border border-input rounded-md" placeholder="管理令牌" required>
+                        </div>
+                        <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">访问面板</button>
+                    </form>
+                </div>
+            </div>
+        <?php else: ?>
+            <div class="mb-8">
+                <div class="tabs flex space-x-4 border-b border-border">
+                    <a href="?tab=dashboard" class="px-4 py-2 -mb-px <?php echo $active_tab === 'dashboard' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">数据</a>
+                    <a href="?tab=links" class="px-4 py-2 -mb-px <?php echo $active_tab === 'links' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">链接</a>
+                    <a href="?tab=users" class="px-4 py-2 -mb-px <?php echo $active_tab === 'users' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">用户</a>
+                    <a href="?tab=settings" class="px-4 py-2 -mb-px <?php echo $active_tab === 'settings' ? 'border-primary text-primary' : 'text-muted-foreground'; ?>">系统</a>
+                </div>
+            </div>
+            <?php if ($active_tab === 'dashboard'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">数据看板</h2>
+                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总用户</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M22 21v-2a4 4 0 00-3-3.87m-3-12a4 4 0 010 7.75"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_users; ?></div>
+                            </div>
+                        </div>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总链接</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_links; ?></div>
+                            </div>
+                        </div>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">总点击</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M3.5 13.1c.8 0 1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1h.5m-16 4h17"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $total_clicks; ?></div>
+                            </div>
+                        </div>
+                        <div class="rounded-lg border bg-card p-4">
+                            <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <h3 class="text-sm font-medium">点击率</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                                    <path d="M2 2v20"></path>
+                                    <path d="M5.5 17h2.25v2.25"></path>
+                                    <path d="M5.5 17h2.25v2.25"></path>
+                                    <path d="M9 11h2.25v2.25"></path>
+                                    <path d="M12.5 5h2.25v2.25"></path>
+                                    <path d="M16 14h2.25v2.25"></path>
+                                    <path d="M19.5 8h2.25v2.25"></path>
+                                    <path d="M2 2h20"></path>
+                                    <path d="M5.5 17l3-6 3 12 4-15 3 9 3-6"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold"><?php echo $click_rate; ?>%</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">每日点击趋势 (折线图, 过去30天)</h3>
+                            <div class="chart-container">
+                                <canvas id="dailyLine"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">Top 点击短码 (柱状图)</h3>
+                            <div class="chart-container">
+                                <canvas id="topBar"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">近7日注册量 (折线图)</h3>
+                            <div class="chart-container">
+                                <canvas id="regLine"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-card rounded-lg border p-6">
+                            <h3 class="text-lg font-semibold mb-4">近7日新建链接量 (折线图)</h3>
+                            <div class="chart-container">
+                                <canvas id="newLinksLine"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            <?php elseif ($active_tab === 'links'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">链接管理</h2>
+                    <div class="flex space-x-4 mb-4">
+                        <button onclick="openAddLinkModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">+ 添加链接</button>
+                        <form method="post" class="inline">
+                            <input type="hidden" name="action" value="delete_expired">
+                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                            <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
+                        </form>
+                    </div>
+                    <div class="md:hidden space-y-4">
+                        <?php foreach ($links as $link): ?>
+                            <div class="bg-card rounded-lg border p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                </div>
+                                <p class="text-sm truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
+                                <div class="text-xs text-muted-foreground mt-2 space-y-1">
+                                    <p>用户ID: <?php echo $link['user_id'] ?: '匿名'; ?></p>
+                                    <p>点击: <?php echo $link['clicks']; ?></p>
+                                    <p>创建: <?php echo date('Y-m-d', strtotime($link['created_at'])); ?></p>
+                                    <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
+                                    <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                                    <p>延迟: <?php echo $link['redirect_delay']; ?>s</p>
+                                    <p>密码保护: <?php echo $link['link_password'] ? '是' : '否'; ?></p>
+                                </div>
+                                <div class="flex space-x-2 mt-4">
+                                    <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded text-sm">编辑</button>
+                                    <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
+                                        <input type="hidden" name="action" value="delete_link">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                        <button type="submit" class="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm">删除</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hidden md:block overflow-x-auto">
+                        <table class="min-w-full bg-card rounded-lg border border-border">
+                            <thead>
+                                <tr class="border-b border-border">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">短链接</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">长链接</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">用户ID</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">点击量</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">过期时间</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">中继页</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">延迟</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">密码</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border">
+                                <?php foreach ($links as $link): ?>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center space-x-2">
+                                                <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-md bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-muted-foreground truncate max-w-xs" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['user_id'] ?: '匿名'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['clicks']; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d', strtotime($link['created_at'])); ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['redirect_delay']; ?>s</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['link_password'] ? '是' : '否'; ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
+                                            <div class="flex space-x-2 justify-end">
+                                                <button onclick="openEditLinkModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>', '<?php echo $link['user_id'] ?: ''; ?>')" class="bg-primary text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                                <form method="post" class="inline" onsubmit="return confirm('删除?');">
+                                                    <input type="hidden" name="action" value="delete_link">
+                                                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                                    <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                                    <button type="submit" class="bg-destructive text-destructive-foreground px-3 py-1 rounded">删除</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            <?php elseif ($active_tab === 'users'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">用户管理</h2>
+                    <div class="md:hidden space-y-4">
+                        <?php foreach ($users as $user): ?>
+                            <div class="bg-card rounded-lg border p-4">
+                                <div class="flex flex-col md:flex-row md:justify-between md:items-center space-y-2">
+                                    <div class="flex-1">
+                                        <div class="font-semibold text-lg"><?php echo htmlspecialchars($user['username']); ?></div>
+                                        <p class="text-sm text-muted-foreground">创建: <?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></p>
+                                    </div>
+                                    <form method="post" class="inline" onsubmit="return confirm('删除用户及其链接?');">
+                                        <input type="hidden" name="action" value="delete_user">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                        <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                        <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">删除</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hidden md:block overflow-x-auto">
+                        <table class="min-w-full bg-card rounded-lg border border-border">
+                            <thead>
+                                <tr class="border-b border-border">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">用户名</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border">
+                                <?php foreach ($users as $user): ?>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium"><?php echo htmlspecialchars($user['username']); ?></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d H:i', strtotime($user['created_at'])); ?></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <form method="post" class="inline" onsubmit="return confirm('删除用户及其链接?');">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                                <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                                <button type="submit" class="bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90">删除</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            <?php elseif ($active_tab === 'settings'): ?>
+                <section>
+                    <h2 class="text-2xl font-bold mb-4">系统设置</h2>
+                    <form method="post">
+                        <input type="hidden" name="action" value="settings">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="bg-card rounded-lg border p-6 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">允许未注册用户使用</span>
+                                    <p class="text-xs text-muted-foreground">允许未登录用户创建短链接，默认开启。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="allow_guest" <?php echo ($settings['allow_guest'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">允许用户注册</span>
+                                    <p class="text-xs text-muted-foreground">允许新用户注册账号，默认开启。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="allow_register" <?php echo ($settings['allow_register'] ?? 'true') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">私有模式（仅管理员）</span>
+                                    <p class="text-xs text-muted-foreground">仅允许管理员访问和创建短链接，默认关闭。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="private_mode" <?php echo ($settings['private_mode'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">启用Cloudflare Turnstile</span>
+                                    <p class="text-xs text-muted-foreground">启用CAPTCHA验证以防止机器人滥用，默认关闭。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="turnstile_enabled" <?php echo ($settings['turnstile_enabled'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-sm font-medium">启用双域名模式</span>
+                                    <p class="text-xs text-muted-foreground">使用单独的短链接域名，关闭则使用官网域名，默认关闭。</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" name="enable_dual_domain" <?php echo ($settings['enable_dual_domain'] ?? 'false') === 'true' ? 'checked' : ''; ?>>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Turnstile Site Key</label>
+                                <p class="text-xs text-muted-foreground mb-2">Cloudflare Turnstile的站点密钥，用于CAPTCHA验证。</p>
+                                <input type="text" name="turnstile_site_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_site_key'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Turnstile Secret Key</label>
+                                <p class="text-xs text-muted-foreground mb-2">Cloudflare Turnstile的密钥，用于服务器端验证。</p>
+                                <input type="text" name="turnstile_secret_key" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['turnstile_secret_key'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">官网域名</label>
+                                <p class="text-xs text-muted-foreground mb-2">网站主域名，例如example.com，用于页面显示。</p>
+                                <input type="text" name="official_domain" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['official_domain'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">短链接域名</label>
+                                <p class="text-xs text-muted-foreground mb-2">短链接使用的域名，例如zuz.asia，仅在双域名模式启用时生效。</p>
+                                <input type="text" name="short_domain" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['short_domain'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">站点标题</label>
+                                <p class="text-xs text-muted-foreground mb-2">网站的标题，显示在页面标题栏和SEO标签中。</p>
+                                <input type="text" name="site_title" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['site_title'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">Header标题</label>
+                                <p class="text-xs text-muted-foreground mb-2">导航栏显示的标题，默认为站点标题。</p>
+                                <input type="text" name="header_title" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['header_title'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">首页简介</label>
+                                <p class="text-xs text-muted-foreground mb-2">首页显示的网站描述，用于介绍服务内容。</p>
+                                <textarea name="home_description" class="w-full px-3 py-2 border border-input rounded-md"><?php echo htmlspecialchars($settings['home_description'] ?? ''); ?></textarea>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">首页展示图URL</label>
+                                <p class="text-xs text-muted-foreground mb-2">首页显示的图片URL，用于美化首页。</p>
+                                <input type="text" name="home_image_url" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['home_image_url'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">中继页Logo URL</label>
+                                <p class="text-xs text-muted-foreground mb-2">中继页面显示的Logo图片URL，留空则不显示。</p>
+                                <input type="text" name="intermediate_logo_url" class="w-full px-3 py-2 border border-input rounded-md" value="<?php echo htmlspecialchars($settings['intermediate_logo_url'] ?? ''); ?>">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">中继页文案</label>
+                                <p class="text-xs text-muted-foreground mb-2">中继页面显示的提示文本，默认为“您将被重定向到以下链接:”。</p>
+                                <textarea name="intermediate_text" class="w-full px-3 py-2 border border-input rounded-md"><?php echo htmlspecialchars($settings['intermediate_text'] ?? ''); ?></textarea>
+                            </div>
+                            <button type="submit" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">保存设置</button>
+                        </div>
+                    </form>
+                </section>
+            <?php endif; ?>
+        <?php endif; ?>
+    </main>
+
+    <div id="addLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="addLinkModalContent">
+            <h3 class="text-lg font-semibold mb-4">添加新链接</h3>
+            <form method="post">
+                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <div class="space-y-3">
+                    <input type="url" name="url" class="w-full px-3 py-2 border border-input rounded-md" placeholder="https://example.com" required>
+                    <input type="text" name="custom_code" class="w-full px-3 py-2 border border-input rounded-md" placeholder="自定义短码（可选）" maxlength="10">
+                    <input type="number" name="user_id" class="w-full px-3 py-2 border border-input rounded-md" placeholder="用户ID（可选）">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">开启转跳中继页</span>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" class="w-full px-3 py-2 border border-input rounded-md" min="0" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选）</label>
+                        <input type="password" name="link_password" class="w-full px-3 py-2 border border-input rounded-md" placeholder="设置密码以加密链接">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
+                        <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeAddLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md">取消</button>
+                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md">添加</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editLinkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="editLinkModalContent">
+            <h3 class="text-lg font-semibold mb-4">编辑链接</h3>
+            <form method="post">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <input type="hidden" name="code" id="editLinkCode">
+                <div class="space-y-3">
+                    <input type="url" name="newurl" id="editLinkUrl" class="w-full px-3 py-2 border border-input rounded-md" required>
+                    <input type="number" name="user_id" id="editLinkUserId" class="w-full px-3 py-2 border border-input rounded-md" placeholder="用户ID">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">开启转跳中继页</span>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate" id="editLinkIntermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" id="editLinkDelay" class="w-full px-3 py-2 border border-input rounded-md" min="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选，留空不修改）</label>
+                        <input type="password" name="link_password" id="editLinkPassword" class="w-full px-3 py-2 border border-input rounded-md" placeholder="新密码">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
+                        <input type="date" name="expiration" id="editLinkExpiration" class="w-full px-3 py-2 border border-input rounded-md">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeEditLinkModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-md">取消</button>
+                        <button type="submit" class="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md">保存</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('hidden');
+        }
+
+        function openAddLinkModal() {
+            const modal = document.getElementById('addLinkModal');
+            const content = document.getElementById('addLinkModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeAddLinkModal() {
+            const modal = document.getElementById('addLinkModal');
+            const content = document.getElementById('addLinkModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function openEditLinkModal(code, url, enableIntermediate, delay, password, expiration, userId) {
+            document.getElementById('editLinkCode').value = code;
+            document.getElementById('editLinkUrl').value = url;
+            document.getElementById('editLinkIntermediate').checked = enableIntermediate;
+            document.getElementById('editLinkDelay').value = delay;
+            document.getElementById('editLinkPassword').value = password;
+            document.getElementById('editLinkExpiration').value = expiration ? expiration.split(' ')[0] : '';
+            document.getElementById('editLinkUserId').value = userId;
+            const modal = document.getElementById('editLinkModal');
+            const content = document.getElementById('editLinkModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeEditLinkModal() {
+            const modal = document.getElementById('editLinkModal');
+            const content = document.getElementById('editLinkModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
+        }
+
+        window.onclick = function(event) {
+            const addLinkModal = document.getElementById('addLinkModal');
+            const editLinkModal = document.getElementById('editLinkModal');
+            if (event.target === addLinkModal) closeAddLinkModal();
+            if (event.target === editLinkModal) closeEditLinkModal();
+        }
+
+        // 图表渲染 (仅 dashboard tab)
+        <?php if ($active_tab === 'dashboard'): ?>
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED', '#C9CBCF', '#ADFF2F', '#20B2AA'];
+
+        // Top 短码柱状图
+        const topLabels = <?php echo json_encode(array_column($top_links, 'shortcode')); ?>;
+        const topData = <?php echo json_encode(array_column($top_links, 'clicks')); ?>;
+        new Chart(document.getElementById('topBar'), {
+            type: 'bar',
+            data: {
+                labels: topLabels,
+                datasets: [{
+                    label: '点击量',
+                    data: topData,
+                    backgroundColor: colors[0]
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 每日点击折线图
+        const dailyLabels = <?php echo json_encode(array_keys($daily_clicks)); ?>;
+        const dailyData = <?php echo json_encode(array_values($daily_clicks)); ?>;
+        new Chart(document.getElementById('dailyLine'), {
+            type: 'line',
+            data: {
+                labels: dailyLabels,
+                datasets: [{
+                    label: '每日点击',
+                    data: dailyData,
+                    borderColor: colors[1],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 近7日注册折线图
+        const regLabels = <?php echo json_encode(array_keys($registrations)); ?>;
+        const regData = <?php echo json_encode(array_values($registrations)); ?>;
+        new Chart(document.getElementById('regLine'), {
+            type: 'line',
+            data: {
+                labels: regLabels,
+                datasets: [{
+                    label: '每日注册',
+                    data: regData,
+                    borderColor: colors[2],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 近7日新建链接折线图
+        const newLinksLabels = <?php echo json_encode(array_keys($new_links)); ?>;
+        const newLinksData = <?php echo json_encode(array_values($new_links)); ?>;
+        new Chart(document.getElementById('newLinksLine'), {
+            type: 'line',
+            data: {
+                labels: newLinksLabels,
+                datasets: [{
+                    label: '每日新建链接',
+                    data: newLinksData,
+                    borderColor: colors[3],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+        <?php endif; ?>
+    </script>
+</body>
+</html>
+create.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+if (get_setting($pdo, 'private_mode') === 'true' && !require_admin_auth()) {
+    header('Location: /admin');
+    exit;
+}
+
+if (get_setting($pdo, 'allow_guest') === 'false' && !is_logged_in()) {
+    header('Location: /login');
+    exit;
+}
+
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
+$csrf_token = generate_csrf_token();
+$error = '';
+$success = '';
+$short_link = '';
+$code = '';
+$user_id = is_logged_in() ? get_current_user_id() : null;
+$is_logged_in = is_logged_in();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    check_rate_limit($pdo);
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRF令牌无效。';
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
+        $error = 'CAPTCHA验证失败。';
+    } else {
+        $longurl = trim($_POST['url'] ?? '');
+        $custom_code = trim($_POST['custom_code'] ?? '');
+        $enable_intermediate = isset($_POST['enable_intermediate']) && $is_logged_in;
+        $redirect_delay = $is_logged_in && is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+        $link_password = $is_logged_in ? trim($_POST['link_password'] ?? '') : '';
+        $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
+        $expiration = $_POST['expiration'] ?? null;
+        
+        if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+            $error = '无效的过期日期格式。';
+        }
+        
+        if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
+            $error = '无效的URL。';
+        } else {
+            $code = '';
+            if (!empty($custom_code)) {
+                $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+                if ($validate === true) {
+                    $code = $custom_code;
+                } else {
+                    $error = $validate;
+                }
+            }
+            if (empty($code)) {
+                try {
+                    $code = generate_random_code($pdo, $reserved_codes);
+                } catch (Exception $e) {
+                    $error = '生成短码失败。';
+                }
+            }
+            if (empty($error)) {
+                $enable_str = $enable_intermediate ? 'true' : 'false';
+                $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
+                $short_link = $base_url . '/' . $code;
+                $success = '短链接创建成功！';
+                $history = isset($_COOKIE['short_history']) ? json_decode($_COOKIE['short_history'], true) : [];
+                $history[] = ['code' => $code, 'longurl' => $longurl, 'shorturl' => $short_link, 'created_at' => time()];
+                $history = array_slice($history, -5);
+                setcookie('short_history', json_encode($history), [
+                    'expires' => time() + (30 * 24 * 3600),
+                    'path' => '/',
+                    'httponly' => true,
+                    'secure' => true,
+                    'samesite' => 'Lax'
+                ]);
+            }
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创建短链接 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+        <script src="includes/script.js"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <?php include 'includes/header.php'; ?>
+    <div class="container mx-auto p-4 pt-20">
+        <div class="max-w-lg mx-auto bg-card rounded-lg border p-6">
+            <h2 class="text-2xl font-bold mb-6 text-center">创建短链接</h2>
+            <?php if ($error): ?>
+                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">长链接</label>
+                    <input type="url" name="url" class="w-full px-3 py-2 border border-input rounded-md" placeholder="https://example.com" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">自定义短码（可选）</label>
+                    <input type="text" name="custom_code" class="w-full px-3 py-2 border border-input rounded-md" placeholder="自定义短码" maxlength="10">
+                </div>
+                <?php if ($is_logged_in): ?>
+                <div class="mb-4">
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium">启用转跳中继页</label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                    <input type="number" name="redirect_delay" class="w-full px-3 py-2 border border-input rounded-md" min="0" value="0">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">链接密码（可选）</label>
+                    <input type="password" name="link_password" class="w-full px-3 py-2 border border-input rounded-md" placeholder="设置密码以加密链接">
+                </div>
+                <?php endif; ?>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
+                    <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-md">
+                </div>
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
+                <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                <?php endif; ?>
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 mt-4">创建短链接</button>
+            </form>
+            <?php if ($success): ?>
+                <div class="mt-6 bg-secondary/50 border border-secondary/30 rounded-md p-4">
+                    <p class="text-sm text-muted-foreground mb-2">您的短链接:</p>
+                    <div class="flex items-stretch space-x-2">
+                        <input type="text" id="shortUrl" value="<?php echo htmlspecialchars($short_link); ?>" readonly class="flex-1 px-3 py-2 border border-input rounded-md bg-background min-w-0">
+                        <button onclick="copyToClipboard('shortUrl')" class="px-4 py-2 bg-secondary text-secondary-foreground rounded whitespace-nowrap">复制</button>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+        <?php if (isset($_COOKIE['short_history'])): ?>
+            <div class="mt-6 max-w-lg mx-auto bg-card rounded-lg border p-6">
+                <h3 class="text-lg font-bold mb-4">最近创建的链接</h3>
+                <ul class="space-y-2">
+                    <?php $history = json_decode($_COOKIE['short_history'], true); foreach ($history as $item): ?>
+                        <li class="flex justify-between items-center text-sm">
+                            <div class="flex-1">
+                                <a href="<?php echo htmlspecialchars($item['shorturl']); ?>" class="text-primary font-mono" target="_blank"><?php echo htmlspecialchars($item['shorturl']); ?></a>
+                                <p class="text-muted-foreground truncate" title="<?php echo htmlspecialchars($item['longurl']); ?>"><?php echo htmlspecialchars($item['longurl']); ?></p>
+                            </div>
+                            <span class="text-muted-foreground text-xs"><?php echo date('Y-m-d', $item['created_at']); ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php include 'includes/footer.php'; ?>
+    <script>
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
+        }
+    </script>
+</body>
+</html>
+dashboard.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+if (get_setting($pdo, 'private_mode') === 'true' && !require_admin_auth()) {
+    header('Location: /admin');
+    exit;
+}
+
+if (!is_logged_in()) {
+    header('Location: /login');
+    exit;
+}
+
+$user_id = get_current_user_id();
+$reserved_codes = ['admin', 'help', 'about', 'api', 'login', 'register', 'logout', 'dashboard'];
+$csrf_token = generate_csrf_token();
+$error = '';
+$success = '';
+$links = [];
+$sort = $_GET['sort'] ?? 'time';
+$order = $sort === 'clicks' ? 'clicks DESC' : 'created_at DESC';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    check_rate_limit($pdo);
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRF令牌无效。';
+    } else {
+        $action = $_POST['action'] ?? '';
+        if ($action === 'add') {
+            if (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
+                $error = 'CAPTCHA验证失败。';
+            } else {
+                $longurl = trim($_POST['url'] ?? '');
+                $custom_code = trim($_POST['custom_code'] ?? '');
+                $enable_intermediate = isset($_POST['enable_intermediate']);
+                $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+                $link_password = trim($_POST['link_password'] ?? '');
+                $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
+                $expiration = $_POST['expiration'] ?? null;
+                
+                if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+                    $error = '无效的过期日期格式。';
+                }
+                
+                if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
+                    $error = '无效的URL。';
+                } else {
+                    $code = '';
+                    if (!empty($custom_code)) {
+                        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+                        if ($validate === true) {
+                            $code = $custom_code;
+                        } else {
+                            $error = $validate;
+                        }
+                    }
+                    if (empty($code)) {
+                        try {
+                            $code = generate_random_code($pdo, $reserved_codes);
+                        } catch (Exception $e) {
+                            $error = '生成短码失败。';
+                        }
+                    }
+                    if (empty($error)) {
+                        $enable_str = $enable_intermediate ? 'true' : 'false';
+                        $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, user_id, enable_intermediate_page, redirect_delay, link_password, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([$code, $longurl, $user_id, $enable_str, $redirect_delay, $password_hash, $expiration ?: null]);
+                        $success = '链接添加成功。';
+                    }
+                }
+            }
+        } elseif ($action === 'edit') {
+            $code = $_POST['code'] ?? '';
+            $newurl = trim($_POST['newurl'] ?? '');
+            $enable_intermediate = isset($_POST['enable_intermediate']);
+            $redirect_delay = is_numeric($_POST['redirect_delay']) ? (int)$_POST['redirect_delay'] : 0;
+            $link_password = trim($_POST['link_password'] ?? '');
+            $password_hash = !empty($link_password) ? password_hash($link_password, PASSWORD_DEFAULT) : null;
+            $expiration = $_POST['expiration'] ?? null;
+            
+            if ($expiration && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+                $error = '无效的过期日期格式。';
+            }
+            
+            $stmt = $pdo->prepare("SELECT id FROM short_links WHERE shortcode = ? AND user_id = ?");
+            $stmt->execute([$code, $user_id]);
+            if (!$stmt->fetch()) {
+                $error = '无权限编辑此链接。';
+            } elseif (!filter_var($newurl, FILTER_VALIDATE_URL)) {
+                $error = '无效的新URL。';
+            } else {
+                $enable_str = $enable_intermediate ? 'true' : 'false';
+                $stmt = $pdo->prepare("UPDATE short_links SET longurl = ?, enable_intermediate_page = ?, redirect_delay = ?, link_password = ?, expiration_date = ? WHERE shortcode = ? AND user_id = ?");
+                $stmt->execute([$newurl, $enable_str, $redirect_delay, $password_hash, $expiration ?: null, $code, $user_id]);
+                $success = '链接更新成功。';
+            }
+        } elseif ($action === 'delete') {
+            $code = $_POST['code'] ?? '';
+            $stmt = $pdo->prepare("DELETE FROM short_links WHERE shortcode = ? AND user_id = ?");
+            $stmt->execute([$code, $user_id]);
+            $success = '链接删除成功。';
+        } elseif ($action === 'delete_expired') {
+            $stmt = $pdo->prepare("DELETE FROM short_links WHERE user_id = ? AND expiration_date < NOW()");
+            $stmt->execute([$user_id]);
+            $success = '已过期链接删除成功。';
+        }
+    }
+}
+
+$stmt = $pdo->prepare("SELECT * FROM short_links WHERE user_id = ? ORDER BY $order");
+$stmt->execute([$user_id]);
+$links = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$total_links = count($links);
+$total_clicks = array_sum(array_column($links, 'clicks'));
+$avg_click_rate = $total_links > 0 ? round($total_clicks / $total_links, 2) : 0;
+
+// 来源统计 (top 10)
+$sources_query = $pdo->prepare("
+SELECT 
+  CASE 
+    WHEN referrer IS NULL OR referrer = '' THEN 'Direct'
+    ELSE regexp_replace(referrer, '^(https?://)?([^/]+).*', '\\2')
+  END AS domain,
+  COUNT(*) as count 
+FROM click_logs 
+WHERE shortcode IN (SELECT shortcode FROM short_links WHERE user_id = ?)
+GROUP BY domain 
+ORDER BY count DESC
+LIMIT 10
+");
+$sources_query->execute([$user_id]);
+$sources = $sources_query->fetchAll(PDO::FETCH_ASSOC);
+
+// Top 50 短码点击量
+$top_query = $pdo->prepare("SELECT shortcode, clicks FROM short_links WHERE user_id = ? ORDER BY clicks DESC LIMIT 50");
+$top_query->execute([$user_id]);
+$top_links = $top_query->fetchAll(PDO::FETCH_ASSOC);
+
+// 过去30天每日点击趋势
+$daily_clicks_query = $pdo->prepare("
+SELECT date(clicked_at) as day, COUNT(*) as count 
+FROM click_logs 
+WHERE shortcode IN (SELECT shortcode FROM short_links WHERE user_id = ?)
+AND clicked_at >= NOW() - INTERVAL '30 days'
+GROUP BY day 
+ORDER BY day ASC
+");
+$daily_clicks_query->execute([$user_id]);
+$daily_clicks_raw = $daily_clicks_query->fetchAll(PDO::FETCH_ASSOC);
+
+$daily_clicks = [];
+for ($i = 29; $i >= 0; $i--) {
+    $date = date('Y-m-d', strtotime("-$i days"));
+    $daily_clicks[$date] = 0;
+}
+foreach ($daily_clicks_raw as $row) {
+    $daily_clicks[$row['day']] = (int)$row['count'];
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户控制台 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="includes/script.js"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://cdn.mengze.vip/npm/chart.js"></script>
+    <style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <?php include 'includes/header.php'; ?>
+    <main class="container mx-auto p-4 pt-20">
+        <?php if ($error): ?>
+            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg mb-4"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-lg mb-4"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        <div class="flex justify-between mb-4">
+        
+            <div class="space-x-2">
+                <button onclick="openAddModal()" class="px-4 py-2 bg-black text-primary-foreground rounded-lg">+ 新建链接</button>
+                <form method="post" class="inline">
+                    <input type="hidden" name="action" value="delete_expired">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                    <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg" onclick="return confirm('确定删除所有已过期链接?');">删除过期链接</button>
+                </form>
+            </div>
+            <div class="flex space-x-2">
+                <button onclick="toggleSort()" class="p-2 bg-black text-primary-foreground rounded-lg md:hidden" id="sortButton" title="切换排序">
+  <svg id="icon-time" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <svg id="icon-clicks" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+  </svg>
+</button>
+            </div>
+        </div>
+        <div class="md:hidden space-y-4">
+            <?php foreach ($links as $link): ?>
+                <div class="bg-card rounded-lg border p-4">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="flex-1 px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                        <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-2 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                    </div>
+                    <p class="text-muted-foreground text-sm mb-4 truncate" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></p>
+                    <div class="space-y-2 text-xs text-muted-foreground mb-4">
+                        <p>点击: <?php echo htmlspecialchars($link['clicks']); ?></p>
+                        <p>创建: <?php echo date('Y-m-d H:i', strtotime($link['created_at'])); ?></p>
+                        <p>过期: <?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></p>
+                        <p>中继页: <?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></p>
+                        <p>延迟: <?php echo $link['redirect_delay']; ?>s</p>
+                        <p>密码保护: <?php echo $link['link_password'] ? '是' : '否'; ?></p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="flex-1 px-3 py-2 bg-black text-primary-foreground rounded text-sm">编辑</button>
+                        <form method="post" class="flex-1 inline" onsubmit="return confirm('删除?');">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                            <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                            <button type="submit" class="w-full px-3 py-2 bg-destructive text-destructive-foreground rounded text-sm">删除</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+            <?php if (empty($links)): ?>
+                <div class="text-center py-12 text-muted-foreground">暂无链接。</div>
+            <?php endif; ?>
+        </div>
+        <div class="hidden md:block overflow-x-auto">
+            <table class="min-w-full bg-card rounded-lg border border-border">
+                <thead>
+                    <tr class="border-b border-border">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">短链接</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">长链接</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">点击量</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">创建时间</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">过期时间</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">中继页</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">延迟</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">密码</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                    <?php foreach ($links as $link): ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                    <input type="text" value="<?php echo htmlspecialchars($short_domain_url . '/' . $link['shortcode']); ?>" readonly class="px-3 py-1 border border-input rounded-lg bg-background text-sm font-mono" id="short_<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                    <button onclick="copyToClipboard('short_<?php echo htmlspecialchars($link['shortcode']); ?>')" class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">复制</button>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-muted-foreground truncate max-w-xs" title="<?php echo htmlspecialchars($link['longurl']); ?>"><?php echo htmlspecialchars($link['longurl']); ?></div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo htmlspecialchars($link['clicks']); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo date('Y-m-d H:i', strtotime($link['created_at'])); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['expiration_date'] ? date('Y-m-d', strtotime($link['expiration_date'])) : '永不过期'; ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['enable_intermediate_page'] ? '开启' : '关闭'; ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['redirect_delay']; ?>s</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"><?php echo $link['link_password'] ? '是' : '否'; ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
+                                <div class="flex space-x-2">
+                                    <button onclick="openEditModal('<?php echo htmlspecialchars($link['shortcode']); ?>', '<?php echo htmlspecialchars(addslashes($link['longurl'])); ?>', <?php echo $link['enable_intermediate_page'] ? 'true' : 'false'; ?>, <?php echo $link['redirect_delay']; ?>, '<?php echo $link['link_password'] ? '***' : ''; ?>', '<?php echo $link['expiration_date'] ? htmlspecialchars($link['expiration_date']) : ''; ?>')" class="bg-black text-primary-foreground px-3 py-1 rounded">编辑</button>
+                                    <form method="post" class="inline" onsubmit="return confirm('删除?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($link['shortcode']); ?>">
+                                        <button type="submit" class="bg-destructive text-destructive-foreground px-3 py-1 rounded">删除</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($links)): ?>
+                        <tr>
+                            <td colspan="9" class="px-6 py-12 text-center text-muted-foreground">暂无链接。</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-8">
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">总链接</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $total_links; ?></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">总点击</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M3.5 13.1c.8 0 1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1s1-.5 1-1.1v-4.9c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5v4.9c0 .6.4 1.1 1 1.1h.5m-16 4h17"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $total_clicks; ?></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <h3 class="text-sm font-medium">平均点击</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                            <path d="M2 2v20"></path>
+                            <path d="M5.5 17h2.25v2.25"></path>
+                            <path d="M5.5 17h2.25v2.25"></path>
+                            <path d="M9 11h2.25v2.25"></path>
+                            <path d="M12.5 5h2.25v2.25"></path>
+                            <path d="M16 14h2.25v2.25"></path>
+                            <path d="M19.5 8h2.25v2.25"></path>
+                            <path d="M2 2h20"></path>
+                            <path d="M5.5 17l3-6 3 12 4-15 3 9 3-6"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold"><?php echo $avg_click_rate; ?></div>
+                    </div>
+                </div>
+            </div>
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-card rounded-lg border p-6">
+                <h3 class="text-lg font-semibold mb-4">每日点击趋势 (折线图, 过去30天)</h3>
+                <div class="chart-container">
+                    <canvas id="dailyLine"></canvas>
+                </div>
+            </div>
+            <div class="bg-card rounded-lg border p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 点击短码 (柱状图)</h3>
+                <div class="chart-container">
+                    <canvas id="topBar"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+    <?php include 'includes/footer.php'; ?>
+
+    <div id="addModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="addModalContent">
+            <h3 class="text-lg font-semibold mb-4">添加新短链接</h3>
+            <form method="post" id="addForm">
+                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <div class="space-y-3">
+                    <input type="url" name="url" class="w-full px-3 py-2 border border-input rounded-lg" placeholder="https://example.com" required>
+                    <input type="text" name="custom_code" class="w-full px-3 py-2 border border-input rounded-lg" placeholder="自定义短码（可选）" maxlength="10">
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium">开启转跳中继页</label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" class="w-full px-3 py-2 border border-input rounded-lg" min="0" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选）</label>
+                        <input type="password" name="link_password" class="w-full px-3 py-2 border border-input rounded-lg" placeholder="设置密码以加密链接">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
+                        <input type="date" name="expiration" class="w-full px-3 py-2 border border-input rounded-lg">
+                    </div>
+                    <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
+                    <div class="cf-turnstile" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                    <?php endif; ?>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeAddModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg">取消</button>
+                        <button type="submit" class="flex-1 bg-black text-primary-foreground py-2 px-4 rounded-lg">添加</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-card rounded-lg border p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all duration-300" id="editModalContent">
+            <h3 class="text-lg font-semibold mb-4">编辑短链接</h3>
+            <form method="post" id="editForm">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <input type="hidden" name="code" id="editCode">
+                <div class="space-y-3">
+                    <input type="url" name="newurl" id="editUrl" class="w-full px-3 py-2 border border-input rounded-lg" required>
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium">开启转跳中继页</label>
+                        <label class="switch">
+                            <input type="checkbox" name="enable_intermediate" id="editIntermediate">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">转跳延迟（秒，可选）</label>
+                        <input type="number" name="redirect_delay" id="editDelay" class="w-full px-3 py-2 border border-input rounded-lg" min="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">链接密码（可选，留空不修改）</label>
+                        <input type="password" name="link_password" id="editPassword" class="w-full px-3 py-2 border border-input rounded-lg" placeholder="新密码">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">过期日期（可选）</label>
+                        <input type="date" name="expiration" id="editExpiration" class="w-full px-3 py-2 border border-input rounded-lg">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeEditModal()" class="flex-1 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg">取消</button>
+                        <button type="submit" class="flex-1 bg-black text-primary-foreground py-2 px-4 rounded-lg">保存</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentSort = '<?php echo $sort; ?>';
+function toggleSort() {
+  currentSort = currentSort === 'time' ? 'clicks' : 'time';
+  document.getElementById('icon-time').classList.toggle('hidden', currentSort !== 'time');
+  document.getElementById('icon-clicks').classList.toggle('hidden', currentSort !== 'clicks');
+  window.location.href = '?sort=' + currentSort;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('icon-time').classList.toggle('hidden', currentSort !== 'time');
+  document.getElementById('icon-clicks').classList.toggle('hidden', currentSort !== 'clicks');
+});
+
+function openAddModal() {
+    const modal = document.getElementById('addModal');
+    const content = document.getElementById('addModalContent');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        content.classList.remove('scale-95', 'opacity-0');
+    }, 10);
+}
+
+
+        function closeAddModal() {
+            const modal = document.getElementById('addModal');
+            const content = document.getElementById('addModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+            document.getElementById('addForm').reset();
+        }
+
+        function openEditModal(code, url, enableIntermediate, delay, password, expiration) {
+            document.getElementById('editCode').value = code;
+            document.getElementById('editUrl').value = url;
+            document.getElementById('editIntermediate').checked = enableIntermediate;
+            document.getElementById('editDelay').value = delay;
+            document.getElementById('editPassword').value = password;
+            document.getElementById('editExpiration').value = expiration ? expiration.split(' ')[0] : '';
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('editModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('editModalContent');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+            document.getElementById('editForm').reset();
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.value).then(() => {
+                alert('已复制');
+            });
+        }
+
+        window.onclick = function(event) {
+            const addModal = document.getElementById('addModal');
+            const editModal = document.getElementById('editModal');
+            if (event.target === addModal) closeAddModal();
+            if (event.target === editModal) closeEditModal();
+        }
+
+        // 图表渲染
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED', '#C9CBCF', '#ADFF2F', '#20B2AA'];
+
+        // Top 短码柱状图
+        const topLabels = <?php echo json_encode(array_column($top_links, 'shortcode')); ?>;
+        const topData = <?php echo json_encode(array_column($top_links, 'clicks')); ?>;
+        new Chart(document.getElementById('topBar'), {
+            type: 'bar',
+            data: {
+                labels: topLabels,
+                datasets: [{
+                    label: '点击量',
+                    data: topData,
+                    backgroundColor: colors[0]
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // 每日点击折线图
+        const dailyLabels = <?php echo json_encode(array_keys($daily_clicks)); ?>;
+        const dailyData = <?php echo json_encode(array_values($daily_clicks)); ?>;
+        new Chart(document.getElementById('dailyLine'), {
+            type: 'line',
+            data: {
+                labels: dailyLabels,
+                datasets: [{
+                    label: '每日点击',
+                    data: dailyData,
+                    borderColor: colors[1],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+index.php
+<?php
+$requestUri = $_SERVER['REQUEST_URI'] ?? '';
+$path = parse_url($requestUri, PHP_URL_PATH);
+if ($path === '/migrate') {
+    require __DIR__ . '/migrate.php';
+    exit;
+}
+
+$request_uri = $_SERVER['REQUEST_URI'];
+$path = parse_url($request_uri, PHP_URL_PATH);
+
+$clean_path = ltrim($path, '/');
+$file_path = __DIR__ . DIRECTORY_SEPARATOR . $clean_path;
+
+if (strpos($path, '.') !== false && file_exists($file_path) && is_file($file_path)) {
+    $ext = pathinfo($clean_path, PATHINFO_EXTENSION);
+    $mime = match($ext) {
+        'css' => 'text/css',
+        'js' => 'application/javascript',
+        'png', 'jpg', 'jpeg', 'gif' => 'image/' . $ext,
+        default => 'application/octet-stream'
+    };
+    header('Content-Type: ' . $mime);
+    header('Cache-Control: public, max-age=3600');
+    header('ETag: "' . md5_file($file_path) . '"');
+    readfile($file_path);
+    exit;
+}
+
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+
+$private_mode = ($settings['private_mode'] ?? 'false') === 'true';
+$require_admin = $private_mode && !require_admin_auth();
+
+if ($require_admin && in_array($path, ['/', '/create', '/login', '/register', '/dashboard'])) {
+    header('Location: /admin');
+    exit;
+}
+
+$current_host = $_SERVER['HTTP_HOST'];
+$official_domain = get_setting($pdo, 'official_domain') ?? $current_host;
+$short_domain = get_setting($pdo, 'short_domain') ?? $current_host;
+
+$is_official = $current_host === $official_domain;
+$is_short = $current_host === $short_domain;
+
+$excluded_paths = ['/create', '/admin', '/login', '/register', '/dashboard', '/logout', '/api/docs'];
+$short_code_match = preg_match('/^\/([A-Za-z0-9]{5,10})$/', $path, $matches);
+$is_short_code = $short_code_match && !in_array($path, $excluded_paths);
+
+if ($enable_dual_domain && $is_official && $is_short_code) {
+    http_response_code(404);
+    echo '404 Not Found';
+    exit;
+}
+
+if ($enable_dual_domain && $is_short) {
+    if ($path === '/' || $path === '') {
+        header('Location: ' . $official_url);
+        exit;
+    } elseif (!$is_short_code) {
+        http_response_code(404);
+        echo '404 Not Found';
+        exit;
+    }
+}
+
+if ($path === '/' || $path === '') {
+    $history = [];
+    if (isset($_COOKIE['short_history'])) {
+        $history = json_decode($_COOKIE['short_history'], true) ?: [];
+    }
+    ?>
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title><?php echo htmlspecialchars(get_setting($pdo, 'site_title')); ?></title>
+        <link rel="stylesheet" href="./includes/styles.css">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="includes/script.js"></script>
+    </head>
+    <body class="bg-background text-foreground min-h-screen">
+        <?php include 'includes/header.php'; ?>
+        <div class="container mx-auto px-4 py-2 pt-20">
+            <section class="hero-section mb-8 bg-card/50 rounded-lg p-4 md:p-8 md:flex md:items-center md:space-x-8">
+                <div class="md:w-1/2 mb-4 md:mb-0">
+                    <h1 class="text-4xl md:text-6xl font-bold mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'header_title')); ?></h1>
+                    <p class="text-lg md:text-xl text-muted-foreground max-w-md"><?php echo htmlspecialchars(get_setting($pdo, 'home_description')); ?></p>
+                    <div class="space-x-4  mt-6">
+                        <?php if (is_logged_in()): ?>
+                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
+                <?php else: ?>
+                    <a href="/create" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
+                <?php endif; ?>
+                <a href="/api/docs" class="mx-auto max-w-fit border px-5 py-3 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 rounded-lg">API文档</a>
+                    </div>
+                </div>
+                <div class="md:w-1/2">
+                    <img src="<?php echo htmlspecialchars(get_setting($pdo, 'home_image_url')); ?>" alt="UI预览" class="mx-auto max-w-full md:max-w-md rounded-lg mt-8">
+                </div>
+            </section>
+
+            <section class="mb-8 md:mb-16 bg-card rounded-lg overflow-hidden">
+                <div class="grid md:grid-cols-2 gap-0">
+                    <div class="p-8 md:p-12 flex flex-col justify-center">
+                        <h2 class="text-3xl md:text-4xl font-bold mb-6">为什么选择我们？</h2>
+                        <div class="space-y-6">
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">极速响应</h3>
+                                    <p class="text-muted-foreground">全球 CDN 加速，平均响应时间仅需 1.3 秒，让您的链接跳转快如闪电</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">安全可靠</h3>
+                                    <p class="text-muted-foreground">企业级安全防护，99.9% 正常运行时间保障，让您的链接永不下线</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="w-12 h-12 bg-black/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-2">完全免费</h3>
+                                    <p class="text-muted-foreground">无隐藏费用，无功能限制，真正永久免费的短链接服务</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-64 md:h-auto">
+                        <img src="https://img.cdn1.vip/i/68f819e067446_1761090016.webp" alt="技术优势" class="absolute inset-0 w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent md:hidden"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="text-center mb-8 md:mb-16">
+                <h2 class="text-2xl md:text-3xl font-bold mb-8">选择您的计划</h2>
+                <div class="grid md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
+                    <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                        <div class="text-center mb-4">
+                            
+                            <h3 class="text-xl md:text-2xl font-bold">Pro</h3>
+                        </div>
+                        <ul class="space-y-2 text-left mb-6">
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 免费无限量Pages</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义域名</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 新功能体验</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 高级支持</li>
+                        </ul>
+                        <div class="border-t border-border pt-4 text-center">
+                            <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$22 / 月</p>
+                            <button class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg transition-colors font-semibold">套餐暂未上线</button>
+                        </div>
+                    </div>
+                    <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card popular">
+                        <div class="text-center mb-4">
+                            
+                            <h3 class="text-xl md:text-2xl font-bold">注册用户套餐</h3>
+                        </div>
+                        <ul class="space-y-2 text-left mb-6">
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 个人链接管理面板</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 详细访问统计</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 无限自定义短码</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自定义中继页设计</li>
+                        </ul>
+                        <div class="border-t border-border pt-4 text-center">
+                            <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                            <button onclick="window.location.href='/register'" class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg hover:bg-black/90 transition-colors font-semibold">
+  注册使用
+</button>
+                        </div>
+                    </div>
+                    <div class="bg-card rounded-lg border p-4 md:p-8 pricing-card">
+                        <div class="text-center mb-4">
+                            
+                            <h3 class="text-xl md:text-2xl font-bold">自建用户套餐</h3>
+                        </div>
+                        <ul class="space-y-2 text-left mb-6">
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 完全数据控制权</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 一键自托管部署</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 自由扩展功能</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">✓</span> 100% 开源免费</li>
+                        </ul>
+                        <div class="border-t border-border pt-4 text-center">
+                            <p class="text-xl md:text-2xl font-bold text-green-600 mb-4">$0 / 月</p>
+                            <button onclick="window.location.href='https://github.com/JanePHPDev/ZuzShortURL'" class="w-full bg-black text-primary-foreground py-2 px-6 rounded-lg hover:bg-black/90 transition-colors font-semibold">
+  Fork本项目
+</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="mb-8 md:mb-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-8 md:p-12 text-white relative overflow-hidden">
+                <div class="absolute inset-0 opacity-10">
+                    <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <path d="M0,0 L100,100 L100,0 Z" fill="white"></path>
+                        <path d="M0,100 L100,0 L0,0 Z" fill="white"></path>
+                    </svg>
+                </div>
+                <div class="relative z-10">
+                    <div class="flex items-center mb-6">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/409388df317614b2.png" alt="Vercel CEO" class="w-16 h-16 rounded-lg mr-4 border-2 border-white/30">
+                        <div>
+                            <h3 class="text-xl font-bold">JanePHPDev</h3>
+                            <p class="text-purple-100">ZeinkLab CEO ＆ 开发者</p>
+                        </div>
+                    </div>
+                    <blockquote class="text-xl md:text-2xl font-light mb-6 italic">
+                        "这个项目展现了现代 Web 开发的精髓——简洁、高效、用户至上。这个项目完美诠释了如何用最新的技术栈打造出真正解决用户痛点的工具。"
+                    </blockquote>
+                    <div class="flex items-center space-x-6 text-sm">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                            </svg>
+                            推荐使用
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            技术领先
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="text-center mb-8 md:mb-16">
+                <h2 class="text-2xl md:text-3xl font-bold mb-8">用户评价</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto">
+                    <div class="bg-card rounded-lg border p-4 md:p-6">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/3974b5accbd063ba.png" alt="用户头像" class="w-12 h-12 rounded-lg mx-auto mb-4">
+                        <h4 class="font-semibold mb-2">大白萝卜</h4>
+                        <p class="text-sm text-muted-foreground">"不错不错，很棒的项目"</p>
+                    </div>
+                    <div class="bg-card rounded-lg border p-4 md:p-6">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/f2f846d91a1c14d8.jpg" alt="用户头像" class="w-12 h-12 rounded-lg mx-auto mb-4">
+                        <h4 class="font-semibold mb-2">柠枺</h4>
+                        <p class="text-sm text-muted-foreground">"很不错的，光看UI不够，中继页设计和账号下管理链接功能都很出色。"</p>
+                    </div>
+                    <div class="bg-card rounded-lg border p-4 md:p-6">
+                        <img src="https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/575821d3f5cfc966.jpg" alt="用户头像" class="w-12 h-12 rounded-lg mx-auto mb-4">
+                        <h4 class="font-semibold mb-2">一只西西</h4>
+                        <p class="text-sm text-muted-foreground">"少见的公益服务，作者是救世主"</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="grid md:grid-cols-3 gap-4 md:gap-8 mb-8 md:mb-16">
+                <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                    <h3 class="text-3xl md:text-4xl font-bold text-primary">10k+</h3>
+                    <p class="text-muted-foreground">链接已创建</p>
+                </div>
+                <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                    <h3 class="text-3xl md:text-4xl font-bold text-primary">99.9%</h3>
+                    <p class="text-muted-foreground">正常运行时间</p>
+                </div>
+                <div class="bg-card rounded-lg border p-4 md:p-8 text-center pricing-card">
+                    <h3 class="text-3xl md:text-4xl font-bold text-primary">1.3s</h3>
+                    <p class="text-muted-foreground">平均响应时间</p>
+                </div>
+            </section>
+
+            <section class="text-center mb-8 md:mb-16">
+                <h2 class="text-2xl md:text-3xl font-bold mb-4">准备好缩短您的第一个链接了吗？</h2>
+                <?php if (is_logged_in()): ?>
+                    <a href="/dashboard" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">前往控制台</a>
+                <?php else: ?>
+                    <a href="/create" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-black bg-black text-white hover:bg-neutral-800 rounded-lg">免费开始</a>
+                <?php endif; ?>
+                <a href="/api/docs" class="mx-auto max-w-fit border px-5 py-2 text-sm font-medium shadow-sm transition-all hover:ring-4 hover:ring-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500 disabled:cursor-not-allowed disabled:hover:ring-0 disabled:border-neutral-200 border-neutral-200 bg-white hover:border-neutral-400 hover:text-neutral-800 text-neutral-500 rounded-lg">API文档</a>
+            </section>
+        </div>
+        <?php include 'includes/footer.php'; ?>
+    </body>
+    </html>
+    <?php
+    exit;
+} elseif ($path === '/create') {
+    require 'create.php';
+} elseif ($path === '/admin') {
+    require 'admin.php';
+} elseif ($path === '/login') {
+    require 'login.php';
+} elseif ($path === '/register') {
+    require 'register.php';
+} elseif ($path === '/dashboard') {
+    require 'dashboard.php';
+} elseif ($path === '/logout') {
+    logout();
+    header('Location: /');
+    exit;
+} elseif ($path === '/api/docs') {
+    require 'api.php';
+} elseif ($path === '/api/create' && $method === 'POST') {
+    header('Content-Type: application/json');
+    check_rate_limit($pdo);
+    $input = json_decode(file_get_contents('php://input'), true);
+    $longurl = trim($input['url'] ?? '');
+    $custom_code = trim($input['custom_code'] ?? '');
+    $enable_intermediate = $input['enable_intermediate'] ?? false;
+    $redirect_delay = is_numeric($input['redirect_delay']) ? (int)$input['redirect_delay'] : 0;
+    $expiration = $input['expiration'] ?? null;
+    $response = ['success' => false];
+    if (!filter_var($longurl, FILTER_VALIDATE_URL)) {
+        $response['error'] = '无效的URL';
+        echo json_encode($response);
+        exit;
+    }
+    $code = '';
+    if (!empty($custom_code)) {
+        $validate = validate_custom_code($custom_code, $pdo, $reserved_codes);
+        if ($validate !== true) {
+            $response['error'] = $validate;
+            echo json_encode($response);
+            exit;
+        }
+        $code = $custom_code;
+    }
+    if (empty($code)) {
+        try {
+            $code = generate_random_code($pdo, $reserved_codes);
+        } catch (Exception $e) {
+            $response['error'] = '生成短码失败';
+            echo json_encode($response);
+            exit;
+        }
+    }
+    $enable_str = $enable_intermediate ? 'true' : 'false';
+    $stmt = $pdo->prepare("INSERT INTO short_links (shortcode, longurl, enable_intermediate_page, redirect_delay, expiration_date) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$code, $longurl, $enable_str, $redirect_delay, $expiration ?: null]);
+    $response['success'] = true;
+    $response['short_url'] = $short_url . '/' . $code;
+    echo json_encode($response);
+    exit;
+} elseif ($short_code_match && !in_array($path, $excluded_paths)) {
+    $code = $matches[1];
+    require 'redirect.php';
+} else {
+    http_response_code(404);
+    ?>
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>404 - 未找到</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-background text-foreground min-h-screen flex items-center justify-center">
+        <div class="text-center">
+            <h1 class="text-6xl font-bold text-muted-foreground mb-4">404</h1>
+            <p class="text-xl text-muted-foreground mb-6">页面未找到</p>
+            <a href="/" class="px-6 py-2 bg-black text-primary-foreground rounded-lg hover:bg-black/90 transition-colors">返回首页</a>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+$handler->gc(1440);
+?>
+migrate.php
+<?php
+$error = '';
+$success = '';
+
+function getPdoFromEnv(): PDO
+{
+    $url = parse_url(getenv('DATABASE_URL'));
+    if (!$url) {
+        throw new RuntimeException('DATABASE_URL 未配置或格式错误');
+    }
+
+    $dsn = sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        $url['host'],
+        $url['port'] ?? 5432,
+        ltrim($url['path'], '/')
+    );
+
+    return new PDO(
+        $dsn,
+        $url['user'],
+        $url['pass'],
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        $pdo = getPdoFromEnv();
+        $pdo->beginTransaction();
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS short_links (
+            id SERIAL PRIMARY KEY,
+            shortcode VARCHAR(10) UNIQUE NOT NULL,
+            longurl TEXT NOT NULL,
+            user_id INT DEFAULT NULL,
+            enable_intermediate_page BOOLEAN DEFAULT FALSE,
+            redirect_delay INT DEFAULT 0,
+            link_password TEXT DEFAULT NULL,
+            expiration_date TIMESTAMP DEFAULT NULL,
+            clicks INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        $pdo->exec("DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='user_id') THEN
+                ALTER TABLE short_links ADD COLUMN user_id INT DEFAULT NULL;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expiration_date') THEN
+                ALTER TABLE short_links ADD COLUMN expiration_date TIMESTAMP DEFAULT NULL;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='redirect_delay') THEN
+                ALTER TABLE short_links ADD COLUMN redirect_delay INT DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='link_password') THEN
+                ALTER TABLE short_links ADD COLUMN link_password TEXT DEFAULT NULL;
+            END IF;
+        END $$");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+            ip INET PRIMARY KEY,
+            request_count INT DEFAULT 0,
+            window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+            sess_id VARCHAR(128) PRIMARY KEY,
+            sess_data TEXT NOT NULL,
+            sess_lifetime INT NOT NULL,
+            sess_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+            key VARCHAR(50) PRIMARY KEY,
+            value TEXT DEFAULT 'true'
+        )");
+
+        // 新增 click_logs 表用于跟踪点击来源
+        $pdo->exec("CREATE TABLE IF NOT EXISTS click_logs (
+            id SERIAL PRIMARY KEY,
+            shortcode VARCHAR(10) NOT NULL,
+            referrer TEXT,
+            user_agent TEXT,
+            ip INET,
+            clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        // 当前域名（纯域名，不含协议）
+        $currentDomain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+        $defaults = [
+            'allow_guest'        => 'false',
+            'allow_register'     => 'true',
+            'private_mode'       => 'false',
+            'turnstile_enabled'  => 'false',
+            'enable_dual_domain' => 'false',
+            'turnstile_site_key' => '',
+            'turnstile_secret_key' => '',
+            'official_domain' => $currentDomain, // 仅域名，如 example.com
+            'short_domain' => '',
+            'site_title' => 'Zuz.Asia',
+            'header_title' => 'Zuz.Asia',
+            'home_description' => 'Zuz.Asia是一个免费、开源的短链接服务，旨在为用户提供简单、高效、安全的链接缩短体验。无需注册即可使用；我们的系统基于PostgreSQL数据库，数据安全有保障。加入数千用户，享受无限短链接创建的便利。',
+            'home_image_url' => 'https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg',
+            'intermediate_logo_url' => '',
+            'intermediate_text' => '您将被重定向到以下链接:'
+        ];
+        foreach ($defaults as $k => $v) {
+            $stmt = $pdo->prepare("
+                INSERT INTO settings (key, value) VALUES (?, ?) 
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value 
+                WHERE settings.value IS NULL OR settings.value = ''
+            ");
+            $stmt->execute([$k, $v]);
+        }
+
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_short_links_user_id ON short_links(user_id)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_short_links_expiration_date ON short_links(expiration_date)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rate_limits_window_start ON rate_limits(window_start)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sessions_sess_time ON sessions(sess_time)");
+
+        // 为 click_logs 添加索引
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_click_logs_shortcode ON click_logs(shortcode)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_click_logs_clicked_at ON click_logs(clicked_at)");
+
+        $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id)+1 FROM short_links), 1), false)");
+        $pdo->exec("SELECT setval('users_id_seq',      COALESCE((SELECT MAX(id)+1 FROM users),      1), false)");
+
+        $pdo->commit();
+        $success = '数据库迁移成功！';
+        header('Location: /admin');
+        exit;
+    } catch (Throwable $e) {
+        isset($pdo) && $pdo->inTransaction() && $pdo->rollBack();
+        $error = '迁移失败: ' . htmlspecialchars($e->getMessage());
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>数据库迁移 - Zuz.Asia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+</head>
+<body class="bg-background text-foreground min-h-screen flex items-center justify-center">
+<main class="container mx-auto p-4">
+    <div class="max-w-md mx-auto bg-card rounded-lg border p-6">
+        <h2 class="text-2xl font-bold mb-4">数据库迁移</h2>
+        <p class="text-muted-foreground mb-4">首次部署时，请运行此迁移以初始化数据库结构。</p>
+        <?php if ($error): ?>
+            <div class="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-md mb-4"><?= $error ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-4 py-3 rounded-md mb-4"><?= $success ?></div>
+        <?php endif; ?>
+        <form method="post">
+            <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">运行迁移</button>
+        </form>
+    </div>
+</main>
+</body>
+</html>
+register.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+if (get_setting($pdo, 'allow_register') === 'false') {
+    header('Location: /admin');
+    exit;
+}
+
+$csrf_token = generate_csrf_token();
+$error = '';
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRF令牌无效。';
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
+        $error = 'CAPTCHA验证失败。';
+    } else {
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
+        if (empty($username) || empty($password) || empty($confirm_password)) {
+            $error = '所有字段均为必填。';
+        } elseif ($password !== $confirm_password) {
+            $error = '密码不匹配。';
+        } elseif (strlen($username) < 3 || strlen($username) > 50) {
+            $error = '用户名长度3-50位。';
+        } elseif (strlen($password) < 6) {
+            $error = '密码至少6位。';
+        } else {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            if ($stmt->fetch()) {
+                $error = '用户名已存在。';
+            } else {
+                $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+                $stmt->execute([$username, $hashed]);
+                $success = '注册成功，请登录。';
+                header('Location: /login');
+                exit;
+            }
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+        <script src="includes/script.js"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body class="bg-background text-foreground min-h-screen flex flex-col">
+    <?php include 'includes/header.php'; ?>
+    <div class="flex-grow flex items-center justify-center pt-24">
+        <div class="max-w-md w-full p-4 bg-card rounded-lg border">
+            <h2 class="text-2xl font-bold mb-4 text-center inline-flex items-center justify-center">
+                <svg class="h-6 w-6 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9V7a2 2 0 00-2-2H8a2 2 0 00-2 2v2m6 4v4m-6-4h12m-6 4v4m0-4h.01" />
+                </svg>
+                立即注册，享受大额优惠~
+            </h2>
+            <?php if ($error): ?>
+                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
+            <?php if ($success): ?>
+                <div class="bg-secondary/50 border border-secondary/30 text-secondary-foreground px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($success); ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <div class="mb-3">
+                    <label class="block text-sm font-medium mb-1">用户名</label>
+                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium mb-1">密码</label>
+                    <input type="password" name="password" class="w-full px-2 py-3 border border-input rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">确认密码</label>
+                    <input type="password" name="confirm_password" class="w-full px-2 py-3 border border-input rounded-md" required>
+                </div>
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
+                <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                <?php endif; ?>
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">注册</button>
+            </form>
+            <p class="mt-3 text-center text-sm">已有账号？<a href="/login">登录</a></p>
+        </div>
+    </div>
+    <?php include 'includes/footer.php'; ?>
+</body>
+</html>
+redirect.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$code = trim($path, '/');
+if (empty($code) || in_array($code, $reserved_codes)) {
+    header('Location: /');
+    exit;
+}
+
+$stmt = $pdo->prepare("SELECT * FROM short_links WHERE shortcode = ?");
+$stmt->execute([$code]);
+$link = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$link) {
+    header('Location: /');
+    exit;
+}
+
+if ($link['expiration_date'] && strtotime($link['expiration_date']) < time()) {
+?>
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>链接已过期 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="includes/script.js"></script>
+        <link rel="stylesheet" href="includes/styles.css">
+    </head>
+    <body class="bg-background text-foreground min-h-screen flex flex-col">
+        <?php include 'includes/header.php'; ?>
+        <div class="flex-grow flex items-center justify-center">
+            <div class="container mx-auto p-4 text-center">
+                <h2 class="text-2xl font-bold mb-4 text-destructive">链接已过期</h2>
+                <p class="text-muted-foreground mb-4">此短链接已过期，无法访问。</p>
+                <a href="/" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">返回首页</a>
+            </div>
+        </div>
+        <?php include 'includes/footer.php'; ?>
+    </body>
+    </html>
+<?php
+    exit;
+}
+
+if (!empty($link['link_password'])) {
+    $input_password = $_POST['password'] ?? '';
+    if (empty($input_password)) {
+?>
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>密码保护 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <script src="includes/script.js"></script>
+            <link rel="stylesheet" href="includes/styles.css">
+        </head>
+        <body class="bg-background text-foreground min-h-screen flex flex-col">
+            <?php include 'includes/header.php'; ?>
+            <div class="flex-grow flex items-center justify-center">
+                <div class="max-w-md w-full p-6 bg-card rounded-lg border">
+                    <h2 class="text-2xl font-bold mb-6 text-center">密码保护</h2>
+                    <form method="post">
+                        <input type="hidden" name="code" value="<?php echo htmlspecialchars($code); ?>">
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium mb-2">请输入密码</label>
+                            <input type="password" name="password" class="w-full px-3 py-2 border border-input rounded-md" placeholder="密码" required>
+                        </div>
+                        <button type="submit" class="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90">验证并跳转</button>
+                    </form>
+                </div>
+            </div>
+            <?php include 'includes/footer.php'; ?>
+        </body>
+        </html>
+<?php
+        exit;
+    } elseif (!password_verify($input_password, $link['link_password'])) {
+        http_response_code(403);
+        die('密码错误。');
+    }
+}
+
+// 记录点击日志
+$log_stmt = $pdo->prepare("INSERT INTO click_logs (shortcode, referrer, user_agent, ip) VALUES (?, ?, ?, ?)");
+$log_stmt->execute([
+    $code,
+    $_SERVER['HTTP_REFERER'] ?? null,
+    $_SERVER['HTTP_USER_AGENT'] ?? null,
+    $_SERVER['REMOTE_ADDR'] ?? null
+]);
+
+// 更新总点击量
+$stmt = $pdo->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE shortcode = ?");
+$stmt->execute([$code]);
+
+if ($link['enable_intermediate_page']) {
+    $delay = (int)$link['redirect_delay'] * 1000;
+?>
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>正在跳转 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+        <meta http-equiv="refresh" content="<?php echo $link['redirect_delay']; ?>;url=<?php echo htmlspecialchars($link['longurl']); ?>">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="includes/script.js"></script>
+            <link rel="stylesheet" href="includes/styles.css">
+    </head>
+    <body class="bg-background text-foreground min-h-screen flex flex-col">
+        <?php include 'includes/header.php'; ?>
+        <div class="flex-grow flex items-center justify-center">
+            <div class="container mx-auto p-4">
+                <div class="max-w-lg mx-auto bg-card rounded-lg border p-6 text-center">
+                    <?php if ($intermediate_logo_url = get_setting($pdo, 'intermediate_logo_url')): ?>
+                        <img src="<?php echo htmlspecialchars($intermediate_logo_url); ?>" alt="Logo" class="mx-auto mb-4 h-16">
+                    <?php endif; ?>
+                    <h2 class="text-2xl font-bold mb-4">正在跳转...</h2>
+                    <p class="text-muted-foreground mb-4"><?php echo htmlspecialchars(get_setting($pdo, 'intermediate_text') ?? '您将被重定向到以下链接:'); ?></p>
+                    <a href="<?php echo htmlspecialchars($link['longurl']); ?>" class="text-primary font-mono break-all hover:underline"><?php echo htmlspecialchars($link['longurl']); ?></a>
+                    <p class="text-sm text-muted-foreground mt-4"><?php echo $link['redirect_delay']; ?>秒后自动跳转，或点击上面的链接立即跳转。</p>
+                    <div class="mt-6">
+                        <a href="<?php echo htmlspecialchars($link['longurl']); ?>" class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">立即跳转</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php include 'includes/footer.php'; ?>
+    </body>
+    </html>
+<?php
+    exit;
+}
+
+header('Location: ' . $link['longurl']);
+exit;
+?>
+login.php
+<?php
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$csrf_token = generate_csrf_token();
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf'] ?? '')) {
+        $error = 'CSRF令牌无效。';
+    } elseif (get_setting($pdo, 'turnstile_enabled') === 'true' && !validate_captcha($_POST['cf-turnstile-response'] ?? '', $pdo)) {
+        $error = 'CAPTCHA验证失败。';
+    } else {
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        if (empty($username) || empty($password)) {
+            $error = '用户名或密码为空。';
+        } else {
+            $stmt = $pdo->prepare("SELECT id, password FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($user && password_verify($password, $user['password'])) {
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $username;
+                header('Location: /dashboard');
+                exit;
+            } else {
+                $error = '用户名或密码错误。';
+            }
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - <?php echo htmlspecialchars(get_setting($pdo, 'site_title') ?? 'Zuz.Asia'); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="includes/styles.css">
+    <script src="includes/script.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body class="bg-background text-foreground min-h-screen flex flex-col">
+    <?php include 'includes/header.php'; ?>
+    <div class="flex-grow flex items-center justify-center pt-16">
+        <div class="max-w-md w-full p-4 bg-card rounded-lg border">
+            <h2 class="text-2xl font-bold mb-4 text-center inline-flex items-center justify-center">
+                <svg class="h-6 w-6 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                登录
+            </h2>
+            <?php if ($error): ?>
+                <div class="bg-destructive/10 border border-destructive/30 text-destructive px-3 py-2 rounded-md mb-3"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                <div class="mb-3">
+                    <label class="block text-sm font-medium mb-1">用户名</label>
+                    <input type="text" name="username" class="w-full px-2 py-3 border border-input rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">密码</label>
+                    <input type="password" name="password" class="w-full px-2 py-3 border border-input rounded-md" required>
+                </div>
+                <?php if (get_setting($pdo, 'turnstile_enabled') === 'true'): ?>
+                <div class="cf-turnstile mb-3" data-sitekey="<?php echo htmlspecialchars(get_setting($pdo, 'turnstile_site_key')); ?>"></div>
+                <?php endif; ?>
+                <button type="submit" class="w-full bg-primary text-primary-foreground py-3 rounded-md hover:bg-primary/90 mt-3 text-sm">登录</button>
+            </form>
+            <?php if (get_setting($pdo, 'allow_register') === 'true'): ?>
+                <p class="mt-3 text-center text-sm">没有账号？<a href="/register">注册</a></p>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php include 'includes/footer.php'; ?>
+</body>
+</html>

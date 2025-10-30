@@ -85,6 +85,16 @@ if (!empty($link['link_password'])) {
     }
 }
 
+// 记录点击日志
+$log_stmt = $pdo->prepare("INSERT INTO click_logs (shortcode, referrer, user_agent, ip) VALUES (?, ?, ?, ?)");
+$log_stmt->execute([
+    $code,
+    $_SERVER['HTTP_REFERER'] ?? null,
+    $_SERVER['HTTP_USER_AGENT'] ?? null,
+    $_SERVER['REMOTE_ADDR'] ?? null
+]);
+
+// 更新总点击量
 $stmt = $pdo->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE shortcode = ?");
 $stmt->execute([$code]);
 

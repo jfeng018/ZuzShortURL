@@ -1,0 +1,6 @@
+.git/
+README.md
+LICENSE
+vercel.json
+.github/
+docker-compose.yml

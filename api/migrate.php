@@ -83,7 +83,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             value TEXT DEFAULT 'true'
         )");
 
-        // 动态获取当前域名（纯域名，不含协议）
+        // 新增 click_logs 表用于跟踪点击来源
+        $pdo->exec("CREATE TABLE IF NOT EXISTS click_logs (
+            id SERIAL PRIMARY KEY,
+            shortcode VARCHAR(10) NOT NULL,
+            referrer TEXT,
+            user_agent TEXT,
+            ip INET,
+            clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
+
+        // 当前域名（纯域名，不含协议）
         $currentDomain = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
         $defaults = [
@@ -116,6 +126,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_short_links_expiration_date ON short_links(expiration_date)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rate_limits_window_start ON rate_limits(window_start)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sessions_sess_time ON sessions(sess_time)");
+
+        // 为 click_logs 添加索引
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_click_logs_shortcode ON click_logs(shortcode)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_click_logs_clicked_at ON click_logs(clicked_at)");
 
         $pdo->exec("SELECT setval('short_links_id_seq', COALESCE((SELECT MAX(id)+1 FROM short_links), 1), false)");
         $pdo->exec("SELECT setval('users_id_seq',      COALESCE((SELECT MAX(id)+1 FROM users),      1), false)");

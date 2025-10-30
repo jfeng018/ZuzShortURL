@@ -1,0 +1,33 @@
+name: Build and Push Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker image tag (e.g., v1.0)'
+        required: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/zuzshorturl:${{ github.event.inputs.tag }} .
+
+      - name: Push tagged image to Docker Hub
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/zuzshorturl:${{ github.event.inputs.tag }}
+
+      - name: Tag and push latest
+        run: |
+          docker tag ${{ secrets.DOCKER_USERNAME }}/zuzshorturl:${{ github.event.inputs.tag }} ${{ secrets.DOCKER_USERNAME }}/zuzshorturl:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/zuzshorturl:latest

@@ -131,10 +131,34 @@ function get_setting($pdo, $key) {
     return $settings[$key] ?? ($key === 'allow_guest' || $key === 'enable_dual_domain' ? 'false' : 'true');
 }
 
-function set_setting($pdo, $key, $value) {
+function set_setting(PDO $pdo, string $key, $value): void
+{
     global $settings;
-    $stmt = $pdo->prepare("INSERT INTO settings (\"key\", value) VALUES (?, ?) ON CONFLICT (\"key\") DO UPDATE SET value = ?");
+
+    $boolKeys = [
+        'turnstile_enabled',
+        'allow_guest',
+        'enable_dual_domain',
+        'enable_registration',
+        'enable_analytics',
+        'show_recent_links',
+        'enable_advertising',
+        'maintenance_mode'
+    ];
+
+    if (in_array($key, $boolKeys, true)) {
+        $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        // 修复：转换为字符串，避免 PDO 布尔绑定 bug
+        $value = $value ? 'true' : 'false';
+    }
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO settings ("key", value)
+         VALUES (?, ?)
+         ON CONFLICT ("key") DO UPDATE SET value = ?'
+    );
     $stmt->execute([$key, $value, $value]);
+
     $settings[$key] = $value;
 }
 

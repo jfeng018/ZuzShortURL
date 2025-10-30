@@ -1,4 +1,5 @@
 # ZuzShortURL
+## QQ Group Open: 491102600 Welcome to Join!
 
 ![Logo](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/1dfc553c491976d9.png)
 
@@ -7,185 +8,248 @@
 [![GitHub license](https://img.shields.io/github/license/JanePHPDev/ZuzShortURL)](https://github.com/JanePHPDev/ZuzShortURL/blob/main/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/JanePHPDev/ZuzShortURL)](https://github.com/JanePHPDev/ZuzShortURL/issues)
 
-基于PHP + PostgreSQL构建的、为创业团队、电商平台及中小型企业量身打造的下一代短链接SaaS解决方案。:rocket:
+A next-generation short URL SaaS solution built with PHP + PostgreSQL, tailored for startup teams, e-commerce platforms, and small to medium-sized enterprises. :rocket:
 
-[在线Demo](https://zuz.asia) | [项目官网](https://zeinklab.com/)  
-Demo站后台地址：https://zuz.asia/admin  
-Demo站后台token：admintoken  
-Demo站会定时清空数据，请勿长期使用，需要短链接服务请访问官网
+[Live Demo](https://zuz.asia) | [Project Website](https://zeinklab.com/) | [中文文档](README_CN.MD)
+Demo Admin URL: https://zuz.asia/admin  
+Demo Admin Token: admintoken  
+The demo site clears data periodically—please don't use it for long-term needs. For production short URL services, visit the official site.
 
-![ZuzShortURL 双端预览截图](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/d2fc9d8ee03eb8a8.jpg)
+![ZuzShortURL ui-View Screenshots](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/46cc19f8046633fa.png)
 
-> *Release仅用于版本发布，使用时请Fork本仓库或点击一键部署。*  
-> *由于Vercel与PHP存在部分冲突，故依赖Composer的功能如二维码生成及活码管理~~退出上线~~。* [^1]  
-> *当前版本为正式版v1.1.9，可直接更新*
+> *Releases are for version announcements only. For usage, please fork this repo or use one-click deployment.*  
+> *Due to some conflicts between Vercel and PHP, features relying on Composer—like QR code generation and live code management—have been ~~temporarily suspended~~.* [^1]  
+> *The current warehouse is updated with the 1.1.9-C2 stable version, and the Docker warehouse has been updated synchronously.*
 
 ![Star History Chart](https://api.star-history.com/svg?repos=JanePHPDev/ZuzShortURL&type=Date)
 
-## 目录
+## Table of Contents
 
-- [Apache + PostgreSQL 部署方案](#apache--postgresql-部署方案)
-  - [准备 PostgreSQL 数据库](#准备-postgresql-数据库)
-  - [配置 Apache 虚拟主机](#配置-apache-虚拟主机)
-  - [启用必要的 Apache 模块](#启用必要的-apache-模块)
-  - [设置文件权限](#设置文件权限)
-- [环境变量格式](#环境变量格式)
-- [本地测试](#本地测试)
-- [数据库迁移](#数据库迁移)
-- [关于Vercel免费搭建](#关于vercel免费搭建)
-- [免费数据库方案（Supabase）](#免费数据库方案supabase)
-- [⚠️ 贡献政策例外声明](#️贡献政策例外声明)
+- [Docker Deployment](#docker-deployment)
+- [Apache + PostgreSQL Deployment](#apache--postgresql-deployment)
+  - [Prepare PostgreSQL Database](#prepare-postgresql-database)
+  - [Configure Apache Virtual Host](#configure-apache-virtual-host)
+  - [Enable Required Apache Modules](#enable-required-apache-modules)
+  - [Set File Permissions](#set-file-permissions)
+- [Environment Variable Format](#environment-variable-format)
+- [Local Testing](#local-testing)
+- [Database Migration](#database-migration)
+- [About Free Vercel Deployment](#about-free-vercel-deployment)
+- [Free Database Option (Supabase)](#free-database-option-supabase)
+- [⚠️ Contribution Policy Exception Notice](#️-contribution-policy-exception-notice)
 
-## Apache + PostgreSQL 部署方案
+## Docker Deployment
 
-### 准备 PostgreSQL 数据库
+This project provides Docker image support, built with Apache + PHP 8.3, exposing port 8437 (customizable). The image includes the `pdo_pgsql` extension, enables `rewrite` and `env` modules, and is pre-configured for URL rewriting. **Docker Compose is not supported yet**—use `docker run` for manual deployment.
 
-首先创建数据库和用户，并授予必要的权限（请将`<数据库名>`等占位符替换为实际值，例如`zuz_db`）：
+### Prerequisites
+- Install Docker ([official download](https://www.docker.com/products/docker-desktop/)).
+- Prepare a PostgreSQL database (see [Free Database Option (Supabase)](#free-database-option-supabase) or deploy manually).
+- Environment variables: `DATABASE_URL` and `ADMIN_TOKEN` (format in [Environment Variable Format](#environment-variable-format)).
 
-```sql
--- 创建数据库
-CREATE DATABASE <数据库名>;
-
--- 创建用户
-CREATE USER <数据库用户名> WITH PASSWORD '<数据库密码>';
-
--- 授予数据库权限
-GRANT ALL PRIVILEGES ON DATABASE <数据库名> TO <数据库用户名>;
-
--- 连接到数据库
-\c <数据库名>
-
--- 授予 Schema 权限（重要！）
-ALTER SCHEMA public OWNER TO <数据库用户名>;
-GRANT ALL ON SCHEMA public TO <数据库用户名>;
+### Pull the Image
+```sh
+docker pull janephpdev/zuzshorturl:latest
 ```
 
-**提示**：执行后无需重复连接数据库。:bulb:
+### Run the Container
+```sh
+docker run -d \
+  --name zuzshorturl-app \
+  -e DATABASE_URL=postgresql://<your-username>:<your-password>@<database-host>:<port>/<database-name> \
+  -e ADMIN_TOKEN=<your-admin-token> \
+  -p 8437:8437 \
+  janephpdev/zuzshorturl:latest
+```
 
-### 配置 Apache 虚拟主机
+- **Parameter Notes**:
+  - `-d`: Run in detached mode (background).
+  - `--name`: Container name (for easy management, e.g., `docker stop zuzshorturl-app` to stop).
+  - `-e`: Inject environment variables (replace placeholders).
+  - `-p 8437:8437`: Port mapping (host 8437 → container 8437).
+- **Custom Port**: For a different port, use `-p 8080:8437` (host 8080 → container 8437).
 
-编辑 Apache 配置文件（通常在 `/etc/apache2/sites-available/` 或 `/etc/httpd/conf.d/`）：
+### Access and Initialization
+1. Open your browser and visit `http://localhost:8437` (or your custom port).
+2. On first run, perform database migration: Visit `http://localhost:8437/migrate`, enter `ADMIN_TOKEN`, and click "Run Migration".
+3. After successful migration, you'll be redirected to the admin panel (`/admin`).
+
+### Nginx Reverse Proxy Support
+Proxy port 8437 in your host's Nginx config (example for `/etc/nginx/sites-available/default`):
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:8437;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+- Restart Nginx: `sudo systemctl restart nginx`.
+- Configure SSL for HTTPS (e.g., via Let's Encrypt).
+
+### Manage the Container
+- View logs: `docker logs zuzshorturl-app`.
+- Stop/remove: `docker stop zuzshorturl-app && docker rm zuzshorturl-app`.
+- Update image: Pull the new version and rerun.
+
+**Tip**: If your PostgreSQL database is on the host machine, use the server's public IP for the database host, not 127.0.0.1—inside Docker, 127.0.0.1 refers to the container itself, not the host.
+
+## Apache + PostgreSQL Deployment
+
+### Prepare PostgreSQL Database
+
+First, create the database and user, and grant necessary permissions (replace placeholders like `<database-name>` with actual values, e.g., `zuz_db`):
+
+```sql
+-- Create database
+CREATE DATABASE <database-name>;
+
+-- Create user
+CREATE USER <database-username> WITH PASSWORD '<database-password>';
+
+-- Grant database privileges
+GRANT ALL PRIVILEGES ON DATABASE <database-name> TO <database-username>;
+
+-- Connect to the database
+\c <database-name>
+
+-- Grant schema privileges (important!)
+ALTER SCHEMA public OWNER TO <database-username>;
+GRANT ALL ON SCHEMA public TO <database-username>;
+```
+
+**Tip**: No need to reconnect after running these. :bulb:
+
+### Configure Apache Virtual Host
+
+Edit your Apache config file (usually in `/etc/apache2/sites-available/` or `/etc/httpd/conf.d/`):
 
 ```apache
 <VirtualHost *:80>
-    # 强制跳转到 HTTPS
-    Redirect permanent / https://<你的域名>/
+    # Force redirect to HTTPS
+    Redirect permanent / https://<your-domain>/
 </VirtualHost>
 
 <VirtualHost *:443>
-    # 运行目录
-    DocumentRoot /var/www/<站点根目录>/api
+    # Document root
+    DocumentRoot /var/www/<site-root>/api
 
-    # 环境变量（建议使用英文注释以避免解析问题）
-    SetEnv DATABASE_URL "postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>"
-    SetEnv ADMIN_TOKEN   "<你的管理员令牌>"
+    # Environment variables (use English comments to avoid parsing issues)
+    SetEnv DATABASE_URL "postgresql://<your-username>:<your-password>@<database-host>:<port>/<database-name>"
+    SetEnv ADMIN_TOKEN   "<your-admin-token>"
 </VirtualHost>
 ```
 
-**提示**：为HTTPS配置SSL证书（如使用Let's Encrypt）以确保安全。:lock:
+**Tip**: Set up SSL certificates for HTTPS (e.g., with Let's Encrypt) for security. :lock:
 
-### 启用必要的 Apache 模块
+### Enable Required Apache Modules
 
 ```sh
-# 启用 rewrite 模块（用于伪静态）
+# Enable rewrite module (for URL rewriting)
 sudo a2enmod rewrite
 
-# 启用 env 模块（用于环境变量）
+# Enable env module (for environment variables)
 sudo a2enmod env
 
-# 重启 Apache
+# Restart Apache
 sudo systemctl restart apache2
 ```
 
-### 设置文件权限
+### Set File Permissions
 
 ```sh
-# 进入项目目录
-cd /var/www/<网站根目录>
+# Enter project directory
+cd /var/www/<site-root>
 
-# 设置所有者为 Apache 用户（根据系统不同可能是 www-data 或 apache）
+# Set owner to Apache user (may be www-data or apache depending on your system)
 sudo chown -R www-data:www-data .
 
-# 设置适当的权限（生产环境可细化：PHP文件644，目录755）
+# Set appropriate permissions (for production, refine: PHP files 644, dirs 755)
 sudo chmod -R 755 .
 ```
 
-运行数据库迁移必须保持这些：
-- [x] 确保 PostgreSQL 服务正在运行
-- [x] 确保 PHP 已安装 `pdo_pgsql` 扩展
-- [ ]  :warning:如果权限不足，检查用户设置
+For database migration to work, ensure:
+- [x] PostgreSQL service is running
+- [x] PHP has the `pdo_pgsql` extension installed
+- [ ] :warning: If permissions are insufficient, check user settings
 
-## 环境变量格式
+## Environment Variable Format
 
-项目的PostgreSQL连接符和Admin登录Token采用环境变量存储，这样可以做到几乎绝对的安全性。  
-如果需要部署到个人VPS上，可参考上方内容，如不使用Apache，必须手动导入下方内容到环境变量。
+The project stores the PostgreSQL connection string and admin login token as environment variables for maximum security.  
+For deployment on a personal VPS, refer to the sections above. If not using Apache, manually add these to your environment variables.
 
 ```env
-DATABASE_URL="postgresql://<你的用户名>:<你的密码>@<数据库地址>:<端口>/<数据库名>"
-ADMIN_TOKEN="你的Token"
+DATABASE_URL=postgresql://<your-username>:<your-password>@<database-host>:<port>/<database-name>
+ADMIN_TOKEN=your-token
 ```
 
-## 本地测试
+## Local Testing
 
-进入项目根目录之后可使用如下命令进行本地调试
+After entering the project root directory, use the following command for local debugging:
 
 ```sh
 php -S localhost:8000 -t . api/index.php
 ```
 
-在使用Nginx、阿帕奇、IIS等服务器软件时可将运行目录设置为`api/`，然后编写伪静态。  
-代码中已内置阿帕奇的伪静态方案。
+When using servers like Nginx, Apache, or IIS, set the root directory to `api/`, and configure URL rewriting.  
+Apache rewriting rules are already built into the code.
 
-## 数据库迁移
+## Database Migration
 
-在首次部署或数据库重置后，您需要手动运行数据库迁移来初始化表结构，这需要你的PostgreSQL用户拥有CREATE权限。请按照以下步骤操作：
+After initial deployment or database reset, manually run the migration to set up the table structure. Your PostgreSQL user needs CREATE privileges. Follow these steps:
 
-1. 确保已设置环境变量 `DATABASE_URL` 和 `ADMIN_TOKEN`。
-2. 通过浏览器访问 `你的域名/migrate`。
-3. 输入管理员Token。
-4. 点击“运行迁移”按钮。
-5. 迁移成功后，将自动重定向到管理面板。
+1. Ensure `DATABASE_URL` and `ADMIN_TOKEN` environment variables are set.
+2. Visit `your-domain/migrate` in your browser.
+3. Enter the admin token.
+4. Click the "Run Migration" button.
+5. On success, you'll be automatically redirected to the admin panel.
 
-**:exclamation:注意**：迁移只需运行一次，后续无需重复执行。如果数据库未迁移，系统可能无法正常运行。
+**:exclamation: Note**: Run migration only once—re-running isn't needed. Without migration, the system may not function properly.
 
-**迁移失败常见原因**：
-- 权限不足：确保用户有CREATE权限。
-- Token错误：检查环境变量是否正确。
-- 数据库连接失败：验证DATABASE_URL格式。
+**Common Migration Failure Causes**:
+- Insufficient privileges: Ensure the user has CREATE permissions.
+- Incorrect token: Double-check the environment variable.
+- Database connection failure: Verify DATABASE_URL format.
 
-## 关于Vercel免费搭建
+## About Free Vercel Deployment
 
-为了满足某些白嫖用户，我们专门针对Vercel做了部署支持。  
-Fork本仓库后，进入Vercel控制台导入该项目，按照环境变量格式填好环境变量即可搭建成功。  
-也可点击如下链接一键部署，部署成功后再填环境变量之后重新Deploy一次即可。  
+To accommodate users looking for free hosting, we've added specific support for Vercel.  
+Fork this repo, then import it into your Vercel dashboard and fill in the environment variables as per the format above.  
+Or use the one-click deploy link below—after deployment, add env vars and redeploy once.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/JanePHPDev/ZuzShortURL)
 
-同样，部署完成之后首次访问需要进行运行迁移，请参考上方给出的方案：  
+After deployment, run the initial migration on first access—see the steps above:
 
-> 1. 确保已设置环境变量 `DATABASE_URL` 和 `ADMIN_TOKEN`。  
-> 2. 通过浏览器访问 `你的域名/migrate`。  
-> 3. 输入管理员Token。  
-> 4. 点击“运行迁移”按钮。  
-> 5. 迁移成功后，将自动重定向到管理面板。  
+> 1. Ensure `DATABASE_URL` and `ADMIN_TOKEN` environment variables are set.  
+> 2. Visit `your-domain/migrate` in your browser.  
+> 3. Enter the admin token.  
+> 4. Click the "Run Migration" button.  
+> 5. On success, you'll be automatically redirected to the admin panel.
 
-## 免费数据库方案（Supabase）
+## Free Database Option (Supabase)
 
-| 步骤 | 操作 |
-|------|------|
-| 1 | 注册 [Supabase](https://app.supabase.com) → 新建一个 Project（免费额度 500 MB 存储、每日 500 万次 API 调用） |
-| 2 | 面包屑导航找到Connect按钮 → 选择 `URI` 格式 → 选择Session pooler |
-| 3 | 复制连接串，格式大致如下：<br>`postgresql://用户名:密码@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`（建议模糊密码如`***`） |
-| 4 | 把连接串粘贴到 Vercel 环境变量 `DATABASE_URL` 即可，无需额外建表，程序首次访问自动迁移 |
+| Step | Action |
+|------|--------|
+| 1 | Sign up at [Supabase](https://app.supabase.com) → Create a new Project (free tier: 500 MB storage, 5M API calls/day) |
+| 2 | In the breadcrumb nav, find the Connect button → Select `URI` format → Choose Session pooler |
+| 3 | Copy the connection string, which looks like: <br>`postgresql://username:password@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres` (mask password like `***` for safety) |
+| 4 | Paste the string into Vercel's `DATABASE_URL` env var—no need to create tables manually; the app auto-migrates on first access |
 
-> Supabase 免费额度足够个人使用，超出后可一键升级，按量计费。:moneybag:
+> Supabase's free tier is plenty for personal use. Upgrade on-demand if you exceed limits. :moneybag:
 
-## ⚠️ 贡献政策例外声明
+## ⚠️ Contribution Policy Exception Notice
 
-此项目使用 [MIT 协议](LICENSE) 开源，**允许自由使用、修改、分发、商用**。  
-但**我明确拒绝任何拉取请求（Pull Request）**。请**不要提交 PR**，它们会被立即关闭。  
-如果你有新的想法，请提交Issue，我会视情况采纳；若发现项目有紧急漏洞或安全漏洞，请发送邮件到Master@Zeapi.ink。  
-你可以自由 fork 并维护自己的分支，但**不要试图将修改合并回本仓库**。  
-:no_entry:这不是开源的标准做法，但这是我选择的方式。
+This project is open-source under the [MIT License](LICENSE), **allowing free use, modification, distribution, and commercial applications**.  
+However, **I explicitly reject all pull requests (PRs)**. Please **do not submit PRs**—they will be closed immediately.  
+If you have new ideas, open an Issue instead, and I'll consider them. For urgent bugs or security issues, email Master@Zeapi.ink.  
+You're welcome to fork and maintain your own branch, but **do not attempt to merge changes back into this repo**.  
+:no_entry: This isn't standard open-source practice, but it's my choice.
 
-[^1]: 此处使用删除线表示功能调整，但实际未完全退出，仅受Vercel限制。
+[^1]: Strikethrough here indicates a feature adjustment, but it's not fully removed—only limited by Vercel.
