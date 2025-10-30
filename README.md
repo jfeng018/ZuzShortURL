@@ -15,7 +15,7 @@ Demo Admin URL: https://zuz.asia/admin
 Demo Admin Token: admintoken  
 The demo site clears data periodically—please don't use it for long-term needs. For production short URL services, visit the official site.
 
-![ZuzShortURL ui-View Screenshots](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/bb7e04a9ed667388.png)
+![ZuzShortURL ui-View Screenshots](https://cdn.mengze.vip/gh/JanePHPDev/Blog-Static-Resource@main/images/46cc19f8046633fa.png)
 
 > *Releases are for version announcements only. For usage, please fork this repo or use one-click deployment.*  
 > *Due to some conflicts between Vercel and PHP, features relying on Composer—like QR code generation and live code management—have been ~~temporarily suspended~~.* [^1]  
